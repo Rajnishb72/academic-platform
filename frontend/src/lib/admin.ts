@@ -136,3 +136,38 @@ export async function fetchPlatformStats(): Promise<PlatformStats> {
         notesByWeek: weeklyBuckets(noteDates),
     };
 }
+
+// ─── Paginated content fetchers for admin Content tab ──────────────────────────
+
+export async function fetchAllPosts(page: number, perPage = 10) {
+    const from = (page - 1) * perPage;
+    const to = from + perPage - 1;
+    const { data, count } = await supabase
+        .from("forum_posts")
+        .select("id,title,created_at,upvotes_count,author_name", { count: "exact" })
+        .order("created_at", { ascending: false })
+        .range(from, to);
+    return { items: data ?? [], total: count ?? 0 };
+}
+
+export async function fetchAllNotes(page: number, perPage = 10) {
+    const from = (page - 1) * perPage;
+    const to = from + perPage - 1;
+    const { data, count } = await supabase
+        .from("notes")
+        .select("id,title,created_at,downloads_count,uploader_name", { count: "exact" })
+        .order("created_at", { ascending: false })
+        .range(from, to);
+    return { items: data ?? [], total: count ?? 0 };
+}
+
+export async function fetchAllGroups(page: number, perPage = 10) {
+    const from = (page - 1) * perPage;
+    const to = from + perPage - 1;
+    const { data, count } = await supabase
+        .from("campus_institutions")
+        .select("id,name,member_count,is_verified,created_at", { count: "exact" })
+        .order("created_at", { ascending: false })
+        .range(from, to);
+    return { items: data ?? [], total: count ?? 0 };
+}

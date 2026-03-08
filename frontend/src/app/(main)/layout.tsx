@@ -182,10 +182,11 @@ function HeaderSearchTrigger() {
       className="relative z-50 hidden sm:flex items-center gap-2 h-9 w-56 xl:w-72 rounded-[0.625rem] px-3 transition-colors hover:bg-[var(--ax-surface-3)] focus-within:bg-[var(--ax-surface-3)] focus-within:ring-2 focus-within:ring-blue-500/50"
       style={{ border: "1px solid var(--ax-border)", background: "var(--ax-surface-2)" }}
     >
-      <button type="submit" className="shrink-0 group hover:opacity-80 transition-opacity" aria-label="Submit search">
+      <button suppressHydrationWarning type="submit" className="shrink-0 group hover:opacity-80 transition-opacity" aria-label="Submit search">
         <Search className="h-3.5 w-3.5" style={{ color: "var(--ax-text-faint)" }} />
       </button>
       <input
+        suppressHydrationWarning
         type="text"
         value={query}
         onChange={handleChange}
@@ -353,6 +354,7 @@ function Sidebar({ collapsed, onToggle, onClose }: {
       {/* ── Collapse Toggle (desktop only) ── */}
       <div className="hidden lg:flex border-t px-3 py-3" style={{ borderColor: "var(--ax-border)" }}>
         <button
+          suppressHydrationWarning
           onClick={onToggle}
           className="flex w-full items-center justify-center rounded-lg p-2 transition-colors hover:bg-[var(--ax-surface-3)]"
           style={{ color: "var(--ax-text-muted)" }}
@@ -364,6 +366,7 @@ function Sidebar({ collapsed, onToggle, onClose }: {
       {/* ── Search Shortcut ── */}
       <div className="hidden lg:block border-t px-3 py-2" style={{ borderColor: "var(--ax-border)" }}>
         <button
+          suppressHydrationWarning
           onClick={() => {
             // Trigger ⌘K programmatically
             window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, ctrlKey: true, bubbles: true }));

@@ -40,8 +40,8 @@ export function useUser() {
         };
     }, [supabase]);
 
-    // Provide a Clerk-like interface for easy migration
-    const clerkLikeUser = user ? {
+    // Provide a compatible interface for all modules
+    const compatUser = user ? {
         id: user.id,
         fullName: (user.user_metadata?.display_name || user.user_metadata?.username || user.email?.split('@')[0]) as string,
         firstName: (user.user_metadata?.display_name?.split(' ')[0] || user.user_metadata?.username || user.email?.split('@')[0]) as string | undefined,
@@ -52,7 +52,7 @@ export function useUser() {
     } : null;
 
     return {
-        user: clerkLikeUser,
+        user: compatUser,
         isLoaded,
         userId: user ? user.id : null,
         isSignedIn: !!user,

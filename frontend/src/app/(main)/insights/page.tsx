@@ -325,7 +325,8 @@ export default function InsightsPage() {
           { icon: BookOpen, label: "Library Files", value: data?.libraryNotes.length ?? 0, sub: `${totalViews} views`, color: "bg-amber-600/10 text-amber-500 ring-1 ring-amber-500/20", delay: 0.08 },
           { icon: Target, label: "Study Plans", value: data?.plans.length ?? 0, sub: `${chapters} chapters`, color: "bg-rose-600/10 text-rose-500 ring-1 ring-rose-500/20", delay: 0.12 },
           { icon: School, label: "Groups", value: data?.groupCount ?? 0, sub: "joined", color: "bg-emerald-600/10 text-emerald-500 ring-1 ring-emerald-500/20", delay: 0.16 },
-          { icon: CheckCircle2, label: "Submitted", value: data?.submittedCount ?? 0, sub: "assignments", color: "bg-teal-600/10 text-teal-500 ring-1 ring-teal-500/20", delay: 0.20 },
+          { icon: ClipboardList, label: "Pending", value: data?.pendingCount ?? 0, sub: "tasks", color: "bg-blue-600/10 text-blue-500 ring-1 ring-blue-500/20", delay: 0.20 },
+          { icon: CheckCircle2, label: "Submitted", value: data?.submittedCount ?? 0, sub: "assignments", color: "bg-teal-600/10 text-teal-500 ring-1 ring-teal-500/20", delay: 0.24 },
         ].map(({ icon: Icon, label, value, sub, color, delay }) => (
           <motion.div key={label} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay }}
             className="ax-card flex flex-col gap-2 p-4 transition hover:bg-[var(--ax-surface-2)]">
@@ -418,7 +419,7 @@ export default function InsightsPage() {
 
           {/* Campus Summary */}
           <Section icon={School} title="Campus Summary" color="text-emerald-500" href="/campus/my-campus" delay={0.30}>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <MetricCell label="Groups Joined" value={data?.groupCount ?? 0} color="text-emerald-600" />
               <MetricCell label="Pending Tasks" value={data?.pendingCount ?? 0} color="text-blue-600" />
               <MetricCell label="Submitted Work" value={data?.submittedCount ?? 0} color="text-teal-600" />

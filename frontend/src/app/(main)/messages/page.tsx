@@ -14,6 +14,7 @@ import {
     Users,
     X,
     ArrowLeft,
+    Trash2,
 } from "lucide-react";
 import {
     getFriendsAndRequests,
@@ -23,6 +24,7 @@ import {
     fetchMessages,
     sendMessage,
     markMessagesRead,
+    deleteMessage,
     type PrivateMessage,
 } from "@/lib/messaging";
 
@@ -120,6 +122,16 @@ export default function MessagesPage() {
         } catch { /* ignore */ } finally {
             setSending(false);
         }
+    }
+
+    async function handleDeleteMessage(msgId: number) {
+        if (!user?.id) return;
+        try {
+            const ok = await deleteMessage(msgId, user.id);
+            if (ok) {
+                setMessages((prev) => prev.filter((m) => m.id !== msgId));
+            }
+        } catch { /* ignore */ }
     }
 
     function selectFriend(f: FriendEntry) {
@@ -279,23 +291,34 @@ export default function MessagesPage() {
                                                         key={msg.id}
                                                         initial={{ opacity: 0, y: 8 }}
                                                         animate={{ opacity: 1, y: 0 }}
-                                                        className={`flex ${isMe ? "justify-end" : "justify-start"}`}
+                                                        className={`flex ${isMe ? "justify-end" : "justify-start"} group`}
                                                     >
-                                                        <div className={`max-w-[70%] rounded-2xl px-4 py-2.5 text-sm shadow-sm ${isMe
-                                                            ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-br-sm"
-                                                            : "rounded-bl-sm"
-                                                            }`}
-                                                            style={!isMe ? {
-                                                                background: "var(--ax-surface-2)",
-                                                                color: "var(--ax-text-primary)",
-                                                                border: "1px solid var(--ax-border)"
-                                                            } : undefined}
-                                                        >
-                                                            <p className="leading-relaxed">{msg.content}</p>
-                                                            <p className={`mt-1 text-[10px] ${isMe ? "text-indigo-200" : ""}`}
-                                                                style={!isMe ? { color: "var(--ax-text-faint)" } : undefined}>
-                                                                {formatTime(msg.created_at)}
-                                                            </p>
+                                                        <div className="relative max-w-[70%]">
+                                                            <div className={`rounded-2xl px-4 py-2.5 text-sm shadow-sm ${isMe
+                                                                ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-br-sm"
+                                                                : "rounded-bl-sm"
+                                                                }`}
+                                                                style={!isMe ? {
+                                                                    background: "var(--ax-surface-2)",
+                                                                    color: "var(--ax-text-primary)",
+                                                                    border: "1px solid var(--ax-border)"
+                                                                } : undefined}
+                                                            >
+                                                                <p className="leading-relaxed">{msg.content}</p>
+                                                                <p className={`mt-1 text-[10px] ${isMe ? "text-indigo-200" : ""}`}
+                                                                    style={!isMe ? { color: "var(--ax-text-faint)" } : undefined}>
+                                                                    {formatTime(msg.created_at)}
+                                                                </p>
+                                                            </div>
+                                                            {isMe && (
+                                                                <button
+                                                                    onClick={() => handleDeleteMessage(msg.id)}
+                                                                    className="absolute -top-2 -right-2 hidden group-hover:flex h-6 w-6 items-center justify-center rounded-full bg-rose-500/90 text-white shadow-lg transition-all hover:bg-rose-600 hover:scale-110"
+                                                                    title="Delete message"
+                                                                >
+                                                                    <Trash2 className="h-3 w-3" />
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </motion.div>
                                                 );

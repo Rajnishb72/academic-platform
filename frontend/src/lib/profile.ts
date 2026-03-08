@@ -12,7 +12,7 @@ export interface UserProfile {
 // ─── Ensure row exists (called on every login) ──────────────────────────────
 export async function ensureProfile(
   userId: string,
-  clerkName: string | null,
+  displayName: string | null,
   username?: string | null,
 ): Promise<void> {
   // Guard: bail if Supabase isn't configured yet
@@ -25,7 +25,7 @@ export async function ensureProfile(
     // Step 1: Insert the row if it doesn't exist yet
     const upsertData: any = {
       id: userId,
-      display_name: clerkName,
+      display_name: displayName,
       updated_at: new Date().toISOString(),
     };
     if (username) {
@@ -40,12 +40,11 @@ export async function ensureProfile(
       );
 
     // Step 2: If the row exists but display_name is still null, fill it in
-    // (covers users who were inserted before name sync was added)
-    if (clerkName) {
+    if (displayName) {
       await supabase
         .from("user_profiles")
         .update({
-          display_name: clerkName,
+          display_name: displayName,
           updated_at: new Date().toISOString(),
         })
         .eq("id", userId)
@@ -147,3 +146,68 @@ export async function uploadAvatar(
 
   return avatarUrl;
 }
+
+// ─── Propagate name/username changes to all modules ───────────────────────────
+
+/**
+ * When a user updates their display name or username, propagate the change
+ * across all modules that store author_name / uploader_name so the UI stays
+ * consistent everywhere without needing real-time joins.
+ */
+export async function propagateNameChange(
+  userId: string,
+  newDisplayName: string,
+  newUsername?: string,
+): Promise<void> {
+  const updates: PromiseLike<unknown>[] = [];
+
+  // 1. Update forum_posts.author_name
+  updates.push(
+    supabase
+      .from("forum_posts")
+      .update({ author_name: newDisplayName })
+      .eq("user_id", userId)
+      .then(() => { })
+  );
+
+  // 2. Update forum_comments.author_name
+  updates.push(
+    supabase
+      .from("forum_comments")
+      .update({ author_name: newDisplayName })
+      .eq("user_id", userId)
+      .then(() => { })
+  );
+
+  // 3. Update notes.uploader_name
+  updates.push(
+    supabase
+      .from("notes")
+      .update({ uploader_name: newDisplayName })
+      .eq("user_id", userId)
+      .then(() => { })
+  );
+
+  // 4. Update campus_members.name + avatar_initials
+  const initials = newDisplayName
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+  updates.push(
+    supabase
+      .from("campus_members")
+      .update({ name: newDisplayName, avatar_initials: initials })
+      .eq("user_id", userId)
+      .then(() => { })
+  );
+
+  try {
+    await Promise.all(updates);
+  } catch (e) {
+    console.error("[profile] propagateNameChange error:", e);
+    // Non-critical — don't throw, the profile itself is already saved
+  }
+}
+

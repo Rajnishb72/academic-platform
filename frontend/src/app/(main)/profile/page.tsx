@@ -50,7 +50,7 @@ import {
   Lock,
   Star,
 } from "lucide-react";
-import { fetchProfile, saveDisplayName, uploadAvatar, saveProfileSettings, checkUsernameAvailable } from "@/lib/profile";
+import { fetchProfile, saveDisplayName, uploadAvatar, saveProfileSettings, checkUsernameAvailable, propagateNameChange } from "@/lib/profile";
 import { supabase } from "@/lib/supabase";
 import { fetchMyInstitutions, fetchAssignments, type Institution } from "@/lib/campus";
 import { computeMilestoneStates, ALL_MILESTONES, type StoredPlan, getPlannerRank, getNextPlannerRank, PLANNER_RANKS } from "@/lib/planner";
@@ -765,19 +765,22 @@ export default function ProfilePage() {
     setSavingName(true);
     try {
       const { createClient } = require("@/lib/supabase/client");
+      const newDisplayName = `${firstName.trim()} ${lastName.trim()}`.trim();
       await createClient().auth.updateUser({
         data: {
-          display_name: `${firstName.trim()} ${lastName.trim()}`.trim(),
+          display_name: newDisplayName,
           username: username.trim(),
         }
       });
       await saveProfileSettings(
         user.id,
         {
-          display_name: `${firstName.trim()} ${lastName.trim()}`.trim(),
+          display_name: newDisplayName,
           username: username.trim(),
         }
       );
+      // Propagate name change across all modules (forums, library, comments)
+      await propagateNameChange(user.id, newDisplayName, username.trim());
       showToast("Profile settings updated!", true);
     } catch (e) {
       showToast((e as Error).message || "Failed to update profile.", false);

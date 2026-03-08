@@ -1085,9 +1085,9 @@ export default function ManagePage() {
     <div className="mx-auto max-w-3xl px-6 py-10">
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-100">My Groups</h1>
+          <h1 className="text-xl font-bold text-slate-100">Create & Edit Groups</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Select a group to manage it
+            Select a group to manage, or create a new one
           </p>
         </div>
         <button

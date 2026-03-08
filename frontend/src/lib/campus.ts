@@ -640,12 +640,24 @@ export async function fetchMembers(
 ): Promise<CampusMember[]> {
   const { data, error } = await supabase
     .from("campus_members")
-    .select("*")
+    .select("*, user_profiles:user_id(display_name, username)")
     .eq("institution_id", institutionId)
     .order("joined_at", { ascending: true });
 
   if (error) throw new Error(error.message);
-  return data ?? [];
+
+  // Use latest display_name from user_profiles if available
+  return (data ?? []).map((m) => {
+    const profile = m.user_profiles as { display_name?: string; username?: string } | null;
+    const latestName = profile?.display_name || m.name;
+    const initials = latestName.split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
+    return {
+      ...m,
+      name: latestName,
+      avatar_initials: initials || m.avatar_initials,
+      user_profiles: undefined, // clean up joined data
+    };
+  });
 }
 
 export async function fetchMyMembership(

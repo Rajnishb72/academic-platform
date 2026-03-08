@@ -58,3 +58,28 @@ export async function getUnreadCount(userId: string): Promise<number> {
         .is("read_at", null);
     return count ?? 0;
 }
+
+/**
+ * Delete a private message. Only the sender can delete their own messages.
+ */
+export async function deleteMessage(
+    messageId: number,
+    senderId: string,
+): Promise<boolean> {
+    try {
+        const { error } = await supabase
+            .from("private_messages")
+            .delete()
+            .eq("id", messageId)
+            .eq("sender_id", senderId); // safety: only sender can delete
+        if (error) {
+            console.error("[messaging] deleteMessage:", error.message);
+            return false;
+        }
+        return true;
+    } catch (e) {
+        console.error("[messaging] deleteMessage error:", e);
+        return false;
+    }
+}
+

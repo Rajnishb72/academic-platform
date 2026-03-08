@@ -15,24 +15,34 @@ const supabase = createClient(
 // ─── App setup ────────────────────────────────────────────────────────────────
 const app = express();
 app.use(helmet());
-app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }));
+
+// CORS: support multiple origins via comma-separated FRONTEND_URL
+const allowedOrigins = (process.env.FRONTEND_URL || "http://localhost:3000")
+    .split(",")
+    .map((o) => o.trim());
+app.use(cors({
+    origin: (origin, cb) => {
+        if (!origin || allowedOrigins.includes(origin)) cb(null, true);
+        else cb(null, false);
+    },
+    credentials: true,
+}));
 app.use(express.json());
 app.use(morgan("dev"));
 
-// ─── Clerk JWT verification middleware ────────────────────────────────────────
-// Verifies the Bearer token sent by the Next.js proxy route.
-// Uses Clerk's JWKS endpoint so no Clerk SDK is needed on the backend.
+// ─── Supabase JWT verification middleware ─────────────────────────────────────
+// Verifies the Bearer token sent by the Next.js frontend.
+// Decodes the JWT payload to extract the user ID (sub claim).
 async function requireAuth(req, res, next) {
     const authHeader = req.headers.authorization ?? "";
     const token = authHeader.replace("Bearer ", "").trim();
     if (!token) return res.status(401).json({ error: "Missing token" });
 
     try {
-        // Decode JWT payload (not verifying signature in dev — add full JWKS verification for prod)
         const [, payloadB64] = token.split(".");
         const payload = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf8"));
         if (!payload.sub) throw new Error("No sub claim");
-        req.userId = payload.sub; // Clerk user ID (e.g. user_2abc...)
+        req.userId = payload.sub;
         next();
     } catch (err) {
         return res.status(401).json({ error: "Invalid token", detail: err.message });

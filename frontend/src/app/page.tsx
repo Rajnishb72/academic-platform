@@ -293,7 +293,7 @@ export default function LandingPage() {
           {/* Trust line */}
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
             className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-slate-500">
-            <span className="flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-emerald-500/60" /> Secured with Clerk Auth</span>
+            <span className="flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-emerald-500/60" /> Secured with Supabase Auth</span>
             <span className="flex items-center gap-1.5"><Zap className="h-3.5 w-3.5 text-amber-500/60" /> Powered by Gemini AI</span>
             <span className="flex items-center gap-1.5"><Globe className="h-3.5 w-3.5 text-blue-500/60" /> Free to Use</span>
           </motion.div>
@@ -606,7 +606,7 @@ export default function LandingPage() {
           <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-white/[0.06] pt-8 sm:flex-row">
             <p className="text-xs text-slate-500">&copy; {new Date().getFullYear()} Academix. All rights reserved.</p>
             <div className="flex items-center gap-4 text-xs text-slate-500">
-              <span className="flex items-center gap-1.5"><ShieldCheck className="h-3 w-3 text-emerald-500/60" /> Secured with Clerk</span>
+              <span className="flex items-center gap-1.5"><ShieldCheck className="h-3 w-3 text-emerald-500/60" /> Secured with Supabase</span>
               <span className="flex items-center gap-1.5"><Database className="h-3 w-3 text-blue-500/60" /> Powered by Supabase</span>
             </div>
           </div>

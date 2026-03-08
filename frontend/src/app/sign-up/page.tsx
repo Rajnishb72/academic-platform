@@ -1,10 +1,10 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { ShieldCheck, GraduationCap, ArrowRight, Lock, Mail, User, AlertCircle, AtSign } from 'lucide-react'
+import { ShieldCheck, GraduationCap, ArrowRight, Lock, Mail, User, AlertCircle, AtSign, CheckCircle2 } from 'lucide-react'
 import { signup } from '@/app/auth/actions'
 
-export default async function SignUpPage({ searchParams }: { searchParams: Promise<{ message?: string }> }) {
+export default async function SignUpPage({ searchParams }: { searchParams: Promise<{ message?: string; status?: string }> }) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     const resolvedSearchParams = await searchParams
@@ -12,6 +12,8 @@ export default async function SignUpPage({ searchParams }: { searchParams: Promi
     if (user) {
         redirect('/dashboard')
     }
+
+    const isSuccess = resolvedSearchParams?.status === 'success'
 
     return (
         <div className="min-h-screen flex text-slate-200 bg-slate-950 font-sans selection:bg-indigo-500/30">
@@ -36,7 +38,21 @@ export default async function SignUpPage({ searchParams }: { searchParams: Promi
 
                     <div className="mt-8">
                         <form action={signup} className="space-y-5">
-                            {resolvedSearchParams?.message && (
+                            {/* Success message */}
+                            {isSuccess && resolvedSearchParams?.message && (
+                                <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-4 mb-5">
+                                    <div className="flex items-center gap-3">
+                                        <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                                        <p className="text-sm font-medium text-emerald-300">
+                                            {resolvedSearchParams.message}
+                                        </p>
+                                    </div>
+                                    <script dangerouslySetInnerHTML={{ __html: `setTimeout(function(){window.location.href='/dashboard'},2000)` }} />
+                                </div>
+                            )}
+
+                            {/* Error message */}
+                            {!isSuccess && resolvedSearchParams?.message && (
                                 <div className="rounded-xl bg-rose-500/10 border border-rose-500/20 p-4 mb-5">
                                     <div className="flex items-center gap-3">
                                         <AlertCircle className="h-5 w-5 text-rose-400" />
@@ -133,6 +149,7 @@ export default async function SignUpPage({ searchParams }: { searchParams: Promi
                                         placeholder="••••••••"
                                     />
                                 </div>
+                                <p className="mt-1.5 text-[11px] text-slate-500">Must be at least 6 characters</p>
                             </div>
 
                             <div>

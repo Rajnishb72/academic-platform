@@ -20,6 +20,7 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  output: "standalone",
   outputFileTracingRoot: path.join(__dirname),
 
   // ── Security Headers ──────────────────────────────────────────────
@@ -36,7 +37,7 @@ const nextConfig: NextConfig = {
   images: {
     formats: ["image/avif", "image/webp"],
     remotePatterns: [
-      { protocol: "https", hostname: "img.clerk.com" },
+
       { protocol: "https", hostname: "**.supabase.co" },
       { protocol: "https", hostname: "**.supabase.in" },
       { protocol: "https", hostname: "images.unsplash.com" },

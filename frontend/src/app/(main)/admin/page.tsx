@@ -1,22 +1,22 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     ShieldCheck, Users, MessageSquare, BookOpen, School, ClipboardList,
     TrendingUp, Loader2, Trash2, BadgeCheck, BadgeX, ArrowLeft, BarChart2,
-    CheckCircle2, AlertCircle, Eye, Flag, Search, Filter,
-    Activity, Globe, Database, Server, Clock, AlertTriangle,
-    ChevronRight, Download, Star, Zap, Ban,
+    CheckCircle2, AlertCircle, Search, AlertTriangle, Download, Ban,
+    LayoutDashboard, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import {
     isAdminSession, fetchPlatformStats, adminDeleteNote, adminDeletePost,
     adminDeleteGroup, setUserVerified, setGroupVerified,
     adminUserBlock, adminUserDelete, type PlatformStats,
+    fetchAllPosts, fetchAllNotes, fetchAllGroups,
 } from "@/lib/admin";
-import { globalSearch, getAllUsers, type SearchResults, type SearchUser } from "@/lib/social";
+import { globalSearch, getAllUsers, type SearchUser } from "@/lib/social";
 
 // ─── Sparkline ────────────────────────────────────────────────────────────────
 
@@ -38,7 +38,7 @@ function Sparkline({ values, color = "#6366f1", height = 32 }: { values: number[
     );
 }
 
-// ─── Bar Chart (Enhanced) ─────────────────────────────────────────────────────
+// ─── Bar Chart ────────────────────────────────────────────────────────────────
 
 function BarChart({ values, color = "#6366f1", label }: { values: number[]; color?: string; label: string }) {
     const max = Math.max(...values, 1);
@@ -48,15 +48,9 @@ function BarChart({ values, color = "#6366f1", label }: { values: number[]; colo
             <p className="mb-3 text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--ax-text-faint)" }}>{label}</p>
             <div className="flex h-24 items-end gap-1.5">
                 {values.map((v, i) => (
-                    <div key={i} className="flex flex-1 flex-col items-center gap-1 group">
-                        <span className="text-[9px] font-semibold opacity-0 group-hover:opacity-100 transition-opacity" style={{ color }}>{v}</span>
-                        <motion.div
-                            initial={{ height: 0 }}
-                            animate={{ height: `${Math.max((v / max) * 80, v > 0 ? 4 : 0)}px` }}
-                            transition={{ delay: i * 0.05, duration: 0.5 }}
-                            className="w-full rounded-t-md transition-all group-hover:opacity-100"
-                            style={{ background: color, opacity: 0.4 + (i / values.length) * 0.6 }}
-                        />
+                    <div key={i} className="group relative flex flex-1 flex-col items-center gap-1">
+                        <span className="text-[8px] font-bold opacity-0 group-hover:opacity-100 transition-opacity" style={{ color }}>{v}</span>
+                        <div className="w-full rounded-t-md transition-all group-hover:opacity-100" style={{ height: `${Math.max((v / max) * 100, 4)}%`, background: color, opacity: 0.7 }} />
                         <span className="text-[8px]" style={{ color: "var(--ax-text-faint)" }}>{labels[i]}</span>
                     </div>
                 ))}
@@ -95,9 +89,6 @@ function StatCard({ label, value, icon: Icon, gradient, trend, sparkData }: {
         </motion.div>
     );
 }
-
-// Moderation UI and System Health removed as per user request.
-
 
 // ─── Section Panel ────────────────────────────────────────────────────────────
 
@@ -176,27 +167,64 @@ function UserRow({ user, onToggleVerify, onBlock, onDelete }: {
     );
 }
 
+// ─── Pagination Component ─────────────────────────────────────────────────────
+
+function Pagination({ page, total, perPage, onPageChange, loading }: {
+    page: number; total: number; perPage: number; onPageChange: (p: number) => void; loading?: boolean;
+}) {
+    const totalPages = Math.ceil(total / perPage);
+    if (totalPages <= 1) return null;
+    return (
+        <div className="mt-4 flex items-center justify-center gap-1">
+            <button onClick={() => onPageChange(page - 1)} disabled={page <= 1 || loading}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-sm transition disabled:opacity-30 hover:bg-[var(--ax-surface-3)]"
+                style={{ color: "var(--ax-text-muted)" }}>
+                <ChevronLeft className="h-4 w-4" />
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((pn) => (
+                <button key={pn} onClick={() => onPageChange(pn)} disabled={loading}
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-semibold transition ${page === pn ? "bg-amber-600 text-white" : "text-slate-400 hover:bg-[var(--ax-surface-3)] hover:text-slate-200"} ${loading ? "opacity-50 cursor-not-allowed" : ""}`}>
+                    {page === pn && loading ? <Loader2 className="h-4 w-4 animate-spin text-white" /> : pn}
+                </button>
+            ))}
+            <button onClick={() => onPageChange(page + 1)} disabled={page >= totalPages || loading}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-sm transition disabled:opacity-30 hover:bg-[var(--ax-surface-3)]"
+                style={{ color: "var(--ax-text-muted)" }}>
+                <ChevronRight className="h-4 w-4" />
+            </button>
+        </div>
+    );
+}
+
 // ─── Admin Page ────────────────────────────────────────────────────────────────
+
+type MainTab = "dashboard" | "overview" | "content" | "users";
+type ContentSubTab = "posts" | "files" | "groups";
 
 export default function AdminPage() {
     const router = useRouter();
     const [stats, setStats] = useState<PlatformStats | null>(null);
     const [loading, setLoading] = useState(true);
-    const [tab, setTab] = useState<"overview" | "users" | "content">("overview");
+    const [tab, setTab] = useState<MainTab>("dashboard");
     const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
 
-    // Advanced search
+    // User search
     const [searchQ, setSearchQ] = useState("");
     const [isSearching, setIsSearching] = useState(false);
-
-    // Pagination for users tab
     const [usersPage, setUsersPage] = useState(1);
     const [paginatedUsers, setPaginatedUsers] = useState<SearchUser[]>([]);
     const [totalUsersCount, setTotalUsersCount] = useState(0);
 
-    // Deletion Modal State
+    // Deletion modal
     const [userToDelete, setUserToDelete] = useState<{ id: string; name: string } | null>(null);
     const [isDeletingUser, setIsDeletingUser] = useState(false);
+
+    // Content tab state
+    const [contentTab, setContentTab] = useState<ContentSubTab>("posts");
+    const [contentPage, setContentPage] = useState(1);
+    const [contentItems, setContentItems] = useState<any[]>([]);
+    const [contentTotal, setContentTotal] = useState(0);
+    const [contentLoading, setContentLoading] = useState(false);
 
     const loadUsersPage = useCallback(async (page: number, query: string) => {
         setIsSearching(true);
@@ -217,6 +245,18 @@ export default function AdminPage() {
         }
     }, []);
 
+    const loadContent = useCallback(async (subTab: ContentSubTab, page: number) => {
+        setContentLoading(true);
+        try {
+            const fetcher = subTab === "posts" ? fetchAllPosts : subTab === "files" ? fetchAllNotes : fetchAllGroups;
+            const { items, total } = await fetcher(page, 10);
+            setContentItems(items);
+            setContentTotal(total);
+        } catch { /* ignore */ } finally {
+            setContentLoading(false);
+        }
+    }, []);
+
     // Initial load
     useEffect(() => {
         if (!isAdminSession()) { router.replace("/dashboard"); return; }
@@ -224,7 +264,7 @@ export default function AdminPage() {
         loadUsersPage(1, "");
     }, [router, loadUsersPage]);
 
-    // Handle search input debounce
+    // Handle search debounce
     useEffect(() => {
         if (tab !== "users") return;
         const to = setTimeout(() => {
@@ -234,50 +274,50 @@ export default function AdminPage() {
         return () => clearTimeout(to);
     }, [searchQ, tab, loadUsersPage]);
 
-    function showToast(msg: string, ok = true) {
+    // Load content tab
+    useEffect(() => {
+        if (tab === "content") {
+            loadContent(contentTab, contentPage);
+        }
+    }, [tab, contentTab, contentPage, loadContent]);
 
+    function showToast(msg: string, ok = true) {
         setToast({ msg, ok });
         setTimeout(() => setToast(null), 3000);
     }
 
     async function deletePost(id: string) {
-        try { await adminDeletePost(id); showToast("Post deleted"); setStats((s) => s ? { ...s, recentPosts: s.recentPosts.filter((p) => p.id !== id), totalPosts: s.totalPosts - 1 } : s); }
+        try { await adminDeletePost(id); showToast("Post deleted"); setContentItems((prev) => prev.filter((p) => p.id !== id)); setContentTotal((t) => t - 1); setStats((s) => s ? { ...s, totalPosts: s.totalPosts - 1 } : s); }
         catch { showToast("Failed to delete post", false); }
     }
     async function deleteNote(id: string) {
-        try { await adminDeleteNote(id); showToast("File deleted"); setStats((s) => s ? { ...s, recentNotes: s.recentNotes.filter((n) => n.id !== id), totalNotes: s.totalNotes - 1 } : s); }
+        try { await adminDeleteNote(id); showToast("File deleted"); setContentItems((prev) => prev.filter((n) => n.id !== id)); setContentTotal((t) => t - 1); setStats((s) => s ? { ...s, totalNotes: s.totalNotes - 1 } : s); }
         catch { showToast("Failed to delete file", false); }
     }
     async function deleteGroup(id: string) {
-        try { await adminDeleteGroup(id); showToast("Group deleted"); setStats((s) => s ? { ...s, recentGroups: s.recentGroups.filter((g) => g.id !== id), totalGroups: s.totalGroups - 1 } : s); }
+        try { await adminDeleteGroup(id); showToast("Group deleted"); setContentItems((prev) => prev.filter((g) => g.id !== id)); setContentTotal((t) => t - 1); setStats((s) => s ? { ...s, totalGroups: s.totalGroups - 1 } : s); }
         catch { showToast("Failed to delete group", false); }
     }
     async function toggleUserVerified(userId: string, current: boolean) {
         await setUserVerified(userId, !current);
         showToast(!current ? "User verified ✓" : "Verification removed");
+        setPaginatedUsers((prev) => prev.map((u) => u.id === userId ? { ...u, is_verified: !current } as any : u));
         setStats((s) => s ? { ...s, recentUsers: s.recentUsers.map((u) => u.id === userId ? { ...u, is_verified: !current } : u) } : s);
     }
     async function toggleGroupVerified(groupId: string, current: boolean) {
         await setGroupVerified(groupId, !current);
         showToast(!current ? "Group verified ✓" : "Group verification removed");
+        setContentItems((prev) => prev.map((g) => g.id === groupId ? { ...g, is_verified: !current } : g));
         setStats((s) => s ? { ...s, recentGroups: s.recentGroups.map((g) => g.id === groupId ? { ...g, is_verified: !current } : g) } : s);
     }
-
     async function toggleUserBanned(userId: string, current: boolean) {
         try {
             await adminUserBlock(userId, !current);
             showToast(!current ? "User blocked 🚫" : "User unblocked ✓");
             setPaginatedUsers((prev) => prev.map((u) => u.id === userId ? { ...u, is_banned: !current } : u));
-            setStats((s) => s ? { ...s, recentUsers: s.recentUsers.map((u) => u.id === userId ? { ...u, is_banned: !current } : u) } : s);
-        } catch {
-            showToast("Failed to modify user state", false);
-        }
+        } catch { showToast("Failed to modify user state", false); }
     }
-
-    function promptDeleteUser(userId: string, name: string) {
-        setUserToDelete({ id: userId, name });
-    }
-
+    function promptDeleteUser(userId: string, name: string) { setUserToDelete({ id: userId, name }); }
     async function confirmUserDeletion() {
         if (!userToDelete) return;
         setIsDeletingUser(true);
@@ -285,19 +325,22 @@ export default function AdminPage() {
             await adminUserDelete(userToDelete.id);
             showToast("User deleted successfully");
             setPaginatedUsers((prev) => prev.filter((u) => u.id !== userToDelete.id));
-            setStats((s) => s ? { ...s, totalUsers: s.totalUsers - 1, recentUsers: s.recentUsers.filter((u) => u.id !== userToDelete.id) } : s);
+            setStats((s) => s ? { ...s, totalUsers: s.totalUsers - 1 } : s);
             setUserToDelete(null);
-        } catch {
-            showToast("Failed to delete user", false);
-        } finally {
-            setIsDeletingUser(false);
-        }
+        } catch { showToast("Failed to delete user", false); } finally { setIsDeletingUser(false); }
     }
 
-    const TABS = [
-        { key: "overview" as const, label: "Overview", icon: BarChart2 },
-        { key: "users" as const, label: "Users", icon: Users },
-        { key: "content" as const, label: "Content", icon: BookOpen },
+    const TABS: { key: MainTab; label: string; icon: React.ElementType }[] = [
+        { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+        { key: "overview", label: "Overview", icon: BarChart2 },
+        { key: "users", label: "Users", icon: Users },
+        { key: "content", label: "Content", icon: BookOpen },
+    ];
+
+    const CONTENT_TABS: { key: ContentSubTab; label: string; icon: React.ElementType; color: string }[] = [
+        { key: "posts", label: "Forum Posts", icon: MessageSquare, color: "text-indigo-400" },
+        { key: "files", label: "Library Files", icon: BookOpen, color: "text-amber-400" },
+        { key: "groups", label: "Campus Groups", icon: School, color: "text-emerald-400" },
     ];
 
     if (loading) {
@@ -317,10 +360,7 @@ export default function AdminPage() {
             {/* Toast */}
             <AnimatePresence>
                 {toast && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 20, scale: 0.95 }}
+                    <motion.div initial={{ opacity: 0, y: 20, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.95 }}
                         className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl border px-4 py-3 shadow-2xl text-sm font-medium backdrop-blur-md
                             ${toast.ok ? "border-emerald-700/50 bg-emerald-950/60 text-emerald-400" : "border-rose-700/50 bg-rose-950/60 text-rose-400"}`}>
                         {toast.ok ? <CheckCircle2 className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
@@ -344,46 +384,19 @@ export default function AdminPage() {
                             <h1 className="text-lg font-bold tracking-tight" style={{ color: "var(--ax-text-primary)" }}>Admin Dashboard</h1>
                         </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                        <Link href="/dashboard" className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-medium transition-colors hover:bg-[var(--ax-surface-3)]"
-                            style={{ color: "var(--ax-text-muted)", border: "1px solid var(--ax-border)" }}>
-                            <ArrowLeft className="h-3.5 w-3.5" /> Back to App
-                        </Link>
-                    </div>
+                    <Link href="/dashboard" className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-medium transition-colors hover:bg-[var(--ax-surface-3)]"
+                        style={{ color: "var(--ax-text-muted)", border: "1px solid var(--ax-border)" }}>
+                        <ArrowLeft className="h-3.5 w-3.5" /> Back to App
+                    </Link>
                 </div>
             </motion.div>
-
-            {/* ── Platform Stats Grid ── */}
-            <div className="mb-7 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-                <StatCard label="Total Users" value={stats!.totalUsers} icon={Users} gradient="from-blue-500 to-indigo-600"
-                    trend="+12%" sparkData={[3, 5, 4, 7, 6, 8, 9, 12]} />
-                <StatCard label="Forum Posts" value={stats!.totalPosts} icon={MessageSquare} gradient="from-purple-500 to-violet-600"
-                    sparkData={stats!.postsByWeek} />
-                <StatCard label="Library Files" value={stats!.totalNotes} icon={BookOpen} gradient="from-amber-500 to-orange-600"
-                    sparkData={stats!.notesByWeek} />
-                <StatCard label="Campus Groups" value={stats!.totalGroups} icon={School} gradient="from-emerald-500 to-teal-600"
-                    trend="+5%" />
-                <StatCard label="Submissions" value={stats!.totalSubmissions} icon={ClipboardList} gradient="from-rose-500 to-pink-600" />
-            </div>
-
-            {/* ── Analytics Charts Row ── */}
-            <div className="mb-7 grid gap-6 sm:grid-cols-2">
-                <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
-                    className="ax-card p-5">
-                    <BarChart values={stats!.postsByWeek} color="#8b5cf6" label="Forum Posts per Week" />
-                </motion.div>
-                <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
-                    className="ax-card p-5">
-                    <BarChart values={stats!.notesByWeek} color="#f59e0b" label="Library Uploads per Week" />
-                </motion.div>
-            </div>
 
             {/* ── Controls Row ── */}
             <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex gap-1 overflow-x-auto scrollbar-hide rounded-xl p-1 shrink-0"
                     style={{ background: "var(--ax-surface-2)", border: "1px solid var(--ax-border)" }}>
                     {TABS.map(({ key, label, icon: Icon }) => (
-                        <button key={key} onClick={() => setTab(key as any)}
+                        <button key={key} onClick={() => setTab(key)}
                             className={`relative flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-all whitespace-nowrap
                                 ${tab === key ? "text-white shadow-sm" : "hover:bg-[var(--ax-surface-3)]"}`}
                             style={tab === key ? { background: "var(--ax-surface-3)" } : { color: "var(--ax-text-muted)" }}>
@@ -398,23 +411,51 @@ export default function AdminPage() {
                     ))}
                 </div>
 
-                <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 h-11 w-full sm:max-w-xs transition-colors focus-within:ring-2 focus-within:ring-amber-500/50"
-                    style={{ border: "1px solid var(--ax-border)", background: "var(--ax-surface-2)" }}>
-                    {isSearching ? <Loader2 className="h-4 w-4 animate-spin text-amber-500" /> : <Search className="h-4 w-4 text-slate-500" />}
-                    <input
-                        type="text"
-                        value={searchQ}
-                        onChange={(e) => setSearchQ(e.target.value)}
-                        placeholder={tab === "users" ? "Find user by @handle or name…" : "Search content globally…"}
-                        className="bg-transparent text-sm outline-none w-full placeholder:text-slate-500"
-                        style={{ color: "var(--ax-text-primary)" }}
-                    />
-                </div>
+                {tab === "users" && (
+                    <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 h-11 w-full sm:max-w-xs transition-colors focus-within:ring-2 focus-within:ring-amber-500/50"
+                        style={{ border: "1px solid var(--ax-border)", background: "var(--ax-surface-2)" }}>
+                        {isSearching ? <Loader2 className="h-4 w-4 animate-spin text-amber-500" /> : <Search className="h-4 w-4 text-slate-500" />}
+                        <input type="text" value={searchQ} onChange={(e) => setSearchQ(e.target.value)}
+                            placeholder="Find user by @handle or name…"
+                            className="bg-transparent text-sm outline-none w-full placeholder:text-slate-500"
+                            style={{ color: "var(--ax-text-primary)" }} />
+                    </div>
+                )}
             </div>
 
             {/* ── Tab Content ── */}
             <AnimatePresence mode="wait">
-                {/* Overview Tab */}
+                {/* ═══════════════ DASHBOARD TAB ═══════════════ */}
+                {tab === "dashboard" && (
+                    <motion.div key="dashboard" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+                        {/* Stats Grid */}
+                        <div className="mb-7 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+                            <StatCard label="Total Users" value={stats!.totalUsers} icon={Users} gradient="from-blue-500 to-indigo-600"
+                                trend="+12%" sparkData={[3, 5, 4, 7, 6, 8, 9, 12]} />
+                            <StatCard label="Forum Posts" value={stats!.totalPosts} icon={MessageSquare} gradient="from-purple-500 to-violet-600"
+                                sparkData={stats!.postsByWeek} />
+                            <StatCard label="Library Files" value={stats!.totalNotes} icon={BookOpen} gradient="from-amber-500 to-orange-600"
+                                sparkData={stats!.notesByWeek} />
+                            <StatCard label="Campus Groups" value={stats!.totalGroups} icon={School} gradient="from-emerald-500 to-teal-600"
+                                trend="+5%" />
+                            <StatCard label="Submissions" value={stats!.totalSubmissions} icon={ClipboardList} gradient="from-rose-500 to-pink-600" />
+                        </div>
+
+                        {/* Analytics Charts Row */}
+                        <div className="grid gap-6 sm:grid-cols-2">
+                            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
+                                className="ax-card p-5">
+                                <BarChart values={stats!.postsByWeek} color="#8b5cf6" label="Forum Posts per Week" />
+                            </motion.div>
+                            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
+                                className="ax-card p-5">
+                                <BarChart values={stats!.notesByWeek} color="#f59e0b" label="Library Uploads per Week" />
+                            </motion.div>
+                        </div>
+                    </motion.div>
+                )}
+
+                {/* ═══════════════ OVERVIEW TAB ═══════════════ */}
                 {tab === "overview" && (
                     <motion.div key="overview" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
                         className="grid gap-6 lg:grid-cols-2">
@@ -443,7 +484,7 @@ export default function AdminPage() {
                     </motion.div>
                 )}
 
-                {/* Users Tab */}
+                {/* ═══════════════ USERS TAB ═══════════════ */}
                 {tab === "users" && (
                     <motion.div key="users" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
                         <Section title={searchQ ? `Search Results (${totalUsersCount})` : "All Registered Users"} icon={Users} color="text-blue-400" badge={totalUsersCount}>
@@ -454,79 +495,122 @@ export default function AdminPage() {
                                     <UserRow key={u.id} user={u as any} onToggleVerify={() => toggleUserVerified(u.id, !!(u as any).is_verified)} onBlock={() => toggleUserBanned(u.id, !!(u as any).is_banned)} onDelete={() => promptDeleteUser(u.id, u.display_name ?? 'this user')} />
                                 ))
                             )}
-
-                            {/* Pagination Controls */}
-                            {searchQ.trim() === "" && totalUsersCount > 10 && (
-                                <div className="mt-4 flex flex-wrap justify-center gap-1">
-                                    {Array.from({ length: Math.ceil(totalUsersCount / 10) }).map((_, idx) => {
-                                        const pageNum = idx + 1;
-                                        return (
-                                            <button
-                                                key={pageNum}
-                                                onClick={() => {
-                                                    setUsersPage(pageNum);
-                                                    loadUsersPage(pageNum, "");
-                                                }}
-                                                disabled={isSearching}
-                                                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-semibold transition ${usersPage === pageNum ? "bg-amber-600 text-white" : "bg-slate-800/50 text-slate-400 hover:bg-slate-700 hover:text-slate-200"} ${isSearching ? "opacity-50 cursor-not-allowed" : ""}`}
-                                            >
-                                                {usersPage === pageNum && isSearching ? <Loader2 className="h-4 w-4 animate-spin text-white" /> : pageNum}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            )}
+                            <Pagination page={usersPage} total={totalUsersCount} perPage={10} loading={isSearching}
+                                onPageChange={(p) => { setUsersPage(p); loadUsersPage(p, searchQ); }} />
                         </Section>
                     </motion.div>
                 )}
 
-                {/* Content Tab */}
+                {/* ═══════════════ CONTENT TAB ═══════════════ */}
                 {tab === "content" && (
-                    <motion.div key="content" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-                        className="grid gap-6 lg:grid-cols-2">
-                        <Section title="Library Files (Most Viewed)" icon={BookOpen} color="text-amber-400" badge={stats!.totalNotes}>
-                            {stats!.recentNotes.map((n) => (
-                                <div key={n.id} className="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-[var(--ax-surface-hover)]"
-                                    style={{ border: "1px solid var(--ax-border)" }}>
-                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 ring-1 ring-amber-500/20">
-                                        <BookOpen className="h-4 w-4 text-amber-400" />
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                        <p className="truncate text-xs font-medium" style={{ color: "var(--ax-text-primary)" }}>{n.title}</p>
-                                        <p className="text-[10px]" style={{ color: "var(--ax-text-faint)" }}>
-                                            <Download className="inline h-2.5 w-2.5" /> {n.downloads_count ?? 0} · {new Date(n.created_at).toLocaleDateString()}
-                                        </p>
-                                    </div>
-                                    <button onClick={() => deleteNote(n.id)}
-                                        className="flex items-center gap-1 rounded-lg border border-rose-700/50 bg-rose-950/30 px-2 py-1 text-[10px] font-medium text-rose-400 hover:bg-rose-900/50 transition">
-                                        <Trash2 className="h-3 w-3" /> Remove
-                                    </button>
-                                </div>
+                    <motion.div key="content" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+                        {/* Content sub-tabs */}
+                        <div className="mb-5 flex gap-1 overflow-x-auto scrollbar-hide rounded-xl p-1"
+                            style={{ background: "var(--ax-surface-2)", border: "1px solid var(--ax-border)" }}>
+                            {CONTENT_TABS.map(({ key, label, icon: Icon, color }) => (
+                                <button key={key} onClick={() => { setContentTab(key); setContentPage(1); }}
+                                    className={`relative flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-all whitespace-nowrap
+                                        ${contentTab === key ? "text-white shadow-sm" : "hover:bg-[var(--ax-surface-3)]"}`}
+                                    style={contentTab === key ? { background: "var(--ax-surface-3)" } : { color: "var(--ax-text-muted)" }}>
+                                    <Icon className={`h-3.5 w-3.5 ${contentTab === key ? color : ""}`} />
+                                    {label}
+                                    {contentTab === key && (
+                                        <motion.div layoutId="content-sub-tab" className="absolute inset-0 rounded-lg"
+                                            style={{ background: "var(--ax-surface-3)", zIndex: -1 }}
+                                            transition={{ type: "spring", bounce: 0.2, duration: 0.4 }} />
+                                    )}
+                                </button>
                             ))}
-                        </Section>
-                        <Section title="Campus Groups" icon={School} color="text-emerald-400" badge={stats!.totalGroups}>
-                            {stats!.recentGroups.map((g) => (
-                                <div key={g.id} className="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-[var(--ax-surface-hover)]"
-                                    style={{ border: "1px solid var(--ax-border)" }}>
-                                    <div className="min-w-0 flex-1">
-                                        <div className="flex items-center gap-1.5">
-                                            <p className="truncate text-xs font-semibold" style={{ color: "var(--ax-text-primary)" }}>{g.name}</p>
-                                            {g.is_verified && <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-amber-500" />}
+                        </div>
+
+                        {/* Content items */}
+                        <Section
+                            title={`${contentTab === "posts" ? "Forum Posts" : contentTab === "files" ? "Library Files" : "Campus Groups"} (${contentTotal})`}
+                            icon={contentTab === "posts" ? MessageSquare : contentTab === "files" ? BookOpen : School}
+                            color={contentTab === "posts" ? "text-indigo-400" : contentTab === "files" ? "text-amber-400" : "text-emerald-400"}
+                            badge={contentTotal}
+                        >
+                            {contentLoading ? (
+                                <div className="flex justify-center py-8">
+                                    <Loader2 className="h-6 w-6 animate-spin text-amber-500" />
+                                </div>
+                            ) : contentItems.length === 0 ? (
+                                <div className="py-8 text-center text-sm text-slate-500">No items found</div>
+                            ) : (
+                                <>
+                                    {/* Forum Posts */}
+                                    {contentTab === "posts" && contentItems.map((p) => (
+                                        <div key={p.id} className="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-[var(--ax-surface-hover)]"
+                                            style={{ border: "1px solid var(--ax-border)" }}>
+                                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 ring-1 ring-indigo-500/20">
+                                                <MessageSquare className="h-4 w-4 text-indigo-400" />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <p className="truncate text-xs font-medium" style={{ color: "var(--ax-text-primary)" }}>{p.title}</p>
+                                                <p className="text-[10px]" style={{ color: "var(--ax-text-faint)" }}>
+                                                    by {p.author_name ?? "Unknown"} · <TrendingUp className="inline h-2.5 w-2.5" /> {p.upvotes_count} upvotes · {new Date(p.created_at).toLocaleDateString()}
+                                                </p>
+                                            </div>
+                                            <button onClick={() => deletePost(p.id)}
+                                                className="flex items-center gap-1 rounded-lg border border-rose-700/50 bg-rose-950/30 px-2 py-1 text-[10px] font-medium text-rose-400 hover:bg-rose-900/50 transition">
+                                                <Trash2 className="h-3 w-3" /> Delete
+                                            </button>
                                         </div>
-                                        <p className="text-[10px]" style={{ color: "var(--ax-text-faint)" }}>{g.member_count} members</p>
-                                    </div>
-                                    <button onClick={() => toggleGroupVerified(g.id, g.is_verified)}
-                                        className={`flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-semibold transition-colors
-                                            ${g.is_verified ? "border-slate-600 bg-slate-800/80 text-slate-400 hover:bg-slate-700" : "border-amber-700/40 bg-amber-600/15 text-amber-500 hover:bg-amber-600/25"}`}>
-                                        {g.is_verified ? <BadgeX className="h-3 w-3" /> : <BadgeCheck className="h-3 w-3" />}
-                                        {g.is_verified ? "Unverify" : "Verify"}
-                                    </button>
-                                    <button onClick={() => deleteGroup(g.id)}
-                                        className="flex items-center gap-1 rounded-lg border border-rose-700/50 bg-rose-950/30 px-2 py-1 text-[10px] font-medium text-rose-400 hover:bg-rose-900/50 transition">
-                                        <Trash2 className="h-3 w-3" /> Delete
-                                    </button>
-                                </div>
-                            ))}
+                                    ))}
+
+                                    {/* Library Files */}
+                                    {contentTab === "files" && contentItems.map((n) => (
+                                        <div key={n.id} className="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-[var(--ax-surface-hover)]"
+                                            style={{ border: "1px solid var(--ax-border)" }}>
+                                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 ring-1 ring-amber-500/20">
+                                                <BookOpen className="h-4 w-4 text-amber-400" />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <p className="truncate text-xs font-medium" style={{ color: "var(--ax-text-primary)" }}>{n.title}</p>
+                                                <p className="text-[10px]" style={{ color: "var(--ax-text-faint)" }}>
+                                                    by {n.uploader_name ?? "Unknown"} · <Download className="inline h-2.5 w-2.5" /> {n.downloads_count ?? 0} downloads · {new Date(n.created_at).toLocaleDateString()}
+                                                </p>
+                                            </div>
+                                            <button onClick={() => deleteNote(n.id)}
+                                                className="flex items-center gap-1 rounded-lg border border-rose-700/50 bg-rose-950/30 px-2 py-1 text-[10px] font-medium text-rose-400 hover:bg-rose-900/50 transition">
+                                                <Trash2 className="h-3 w-3" /> Remove
+                                            </button>
+                                        </div>
+                                    ))}
+
+                                    {/* Campus Groups */}
+                                    {contentTab === "groups" && contentItems.map((g) => (
+                                        <div key={g.id} className="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-[var(--ax-surface-hover)]"
+                                            style={{ border: "1px solid var(--ax-border)" }}>
+                                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 ring-1 ring-emerald-500/20">
+                                                <School className="h-4 w-4 text-emerald-400" />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex items-center gap-1.5">
+                                                    <p className="truncate text-xs font-semibold" style={{ color: "var(--ax-text-primary)" }}>{g.name}</p>
+                                                    {g.is_verified && <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-amber-500" />}
+                                                </div>
+                                                <p className="text-[10px]" style={{ color: "var(--ax-text-faint)" }}>
+                                                    {g.member_count} members · {new Date(g.created_at).toLocaleDateString()}
+                                                </p>
+                                            </div>
+                                            <button onClick={() => toggleGroupVerified(g.id, g.is_verified)}
+                                                className={`flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-semibold transition-colors
+                                                    ${g.is_verified ? "border-slate-600 bg-slate-800/80 text-slate-400 hover:bg-slate-700" : "border-amber-700/40 bg-amber-600/15 text-amber-500 hover:bg-amber-600/25"}`}>
+                                                {g.is_verified ? <BadgeX className="h-3 w-3" /> : <BadgeCheck className="h-3 w-3" />}
+                                                {g.is_verified ? "Unverify" : "Verify"}
+                                            </button>
+                                            <button onClick={() => deleteGroup(g.id)}
+                                                className="flex items-center gap-1 rounded-lg border border-rose-700/50 bg-rose-950/30 px-2 py-1 text-[10px] font-medium text-rose-400 hover:bg-rose-900/50 transition">
+                                                <Trash2 className="h-3 w-3" /> Delete
+                                            </button>
+                                        </div>
+                                    ))}
+                                </>
+                            )}
+
+                            <Pagination page={contentPage} total={contentTotal} perPage={10} loading={contentLoading}
+                                onPageChange={(p) => setContentPage(p)} />
                         </Section>
                     </motion.div>
                 )}
@@ -535,44 +619,30 @@ export default function AdminPage() {
             {/* Custom Delete Confirmation Modal */}
             <AnimatePresence>
                 {userToDelete && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-                    >
-                        <motion.div
-                            initial={{ scale: 0.95, opacity: 0, y: 10 }}
-                            animate={{ scale: 1, opacity: 1, y: 0 }}
-                            exit={{ scale: 0.95, opacity: 0, y: 10 }}
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                        <motion.div initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 10 }}
                             className="w-full max-w-sm overflow-hidden rounded-2xl shadow-2xl"
-                            style={{ background: "var(--ax-surface-1)", border: "1px solid var(--ax-border)" }}
-                        >
+                            style={{ background: "var(--ax-surface-1)", border: "1px solid var(--ax-border)" }}>
                             <div className="p-6">
                                 <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-rose-500/10">
                                     <AlertTriangle className="h-6 w-6 text-rose-500" />
                                 </div>
                                 <h3 className="text-center text-lg font-bold" style={{ color: "var(--ax-text-primary)" }}>
-                                    Delete User File?
+                                    Delete User?
                                 </h3>
                                 <p className="mt-2 text-center text-sm" style={{ color: "var(--ax-text-faint)" }}>
-                                    Are you absolutely sure you want to permanently delete <strong>{userToDelete.name}</strong>? This action will destroy their account and cannot be reversed.
+                                    Are you absolutely sure you want to permanently delete <strong>{userToDelete.name}</strong>? This action cannot be reversed.
                                 </p>
                             </div>
                             <div className="flex gap-3 bg-black/20 p-4" style={{ borderTop: "1px solid var(--ax-border)" }}>
-                                <button
-                                    onClick={() => setUserToDelete(null)}
-                                    disabled={isDeletingUser}
+                                <button onClick={() => setUserToDelete(null)} disabled={isDeletingUser}
                                     className="flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold transition hover:bg-[var(--ax-surface-3)]"
-                                    style={{ color: "var(--ax-text-muted)" }}
-                                >
+                                    style={{ color: "var(--ax-text-muted)" }}>
                                     Cancel
                                 </button>
-                                <button
-                                    onClick={confirmUserDeletion}
-                                    disabled={isDeletingUser}
-                                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:opacity-50"
-                                >
+                                <button onClick={confirmUserDeletion} disabled={isDeletingUser}
+                                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:opacity-50">
                                     {isDeletingUser ? <Loader2 className="h-4 w-4 animate-spin" /> : "Delete"}
                                 </button>
                             </div>
