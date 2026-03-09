@@ -16,6 +16,7 @@ import {
   Loader2,
   X,
   Plus,
+  BadgeCheck,
 } from "lucide-react";
 import { useUser } from "@/hooks/useUser";
 import {
@@ -55,6 +56,11 @@ function InstitutionCard({ inst }: { inst: Institution }) {
               <h3 className="truncate text-sm font-semibold group-hover:text-emerald-400 transition-colors" style={{ color: "var(--ax-text-primary)" }}>
                 {inst.name}
               </h3>
+              {inst.is_verified && (
+                <span title="Verified Group">
+                  <BadgeCheck className="h-4 w-4 shrink-0 text-amber-500" />
+                </span>
+              )}
               {inst.is_public ? (
                 <Globe className="h-3.5 w-3.5 shrink-0 text-slate-500" />
               ) : (
@@ -286,6 +292,8 @@ export default function InstitutionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const GROUPS_PER_PAGE = 10;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -309,6 +317,16 @@ export default function InstitutionsPage() {
       i.name.toLowerCase().includes(search.toLowerCase()) ||
       i.description.toLowerCase().includes(search.toLowerCase()),
   );
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / GROUPS_PER_PAGE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const paginatedGroups = filtered.slice(
+    (safeCurrentPage - 1) * GROUPS_PER_PAGE,
+    safeCurrentPage * GROUPS_PER_PAGE,
+  );
+
+  // Reset page when search changes
+  useEffect(() => { setCurrentPage(1); }, [search]);
 
   const myInstitutions = institutions.filter(
     (i) => i.userRole && i.memberStatus === "active",
@@ -396,34 +414,79 @@ export default function InstitutionsPage() {
           </Link>
         </div>
       ) : (
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((inst) => (
-            <InstitutionCard key={inst.id} inst={inst} />
-          ))}
+        <>
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {paginatedGroups.map((inst) => (
+              <InstitutionCard key={inst.id} inst={inst} />
+            ))}
 
-          {/* Create institution card */}
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-700/60 bg-transparent p-8 text-center transition hover:border-indigo-500/50"
-          >
-            <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-slate-800/80 ring-1 ring-slate-700/50 shadow-sm">
-              <Sparkles className="h-5 w-5 text-indigo-400" />
+            {/* Create institution card — only on the last page */}
+            {safeCurrentPage === totalPages && (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-700/60 bg-transparent p-8 text-center transition hover:border-indigo-500/50"
+              >
+                <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-slate-800/80 ring-1 ring-slate-700/50 shadow-sm">
+                  <Sparkles className="h-5 w-5 text-indigo-400" />
+                </div>
+                <p className="text-sm font-medium text-slate-200">
+                  Create Institution
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Set up your own campus space
+                </p>
+                <button
+                  onClick={() => setShowCreate(true)}
+                  className="mt-4 rounded-lg bg-emerald-600/15 px-4 py-2 text-xs font-semibold text-emerald-400 ring-1 ring-emerald-500/20 transition hover:bg-emerald-600/25"
+                >
+                  Get Started
+                </button>
+              </motion.div>
+            )}
+          </div>
+
+          {/* Numbered Pagination */}
+          {totalPages > 1 && (
+            <div className="mt-8 flex items-center justify-center gap-1.5">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={safeCurrentPage <= 1}
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700/60 bg-slate-800/50 text-sm text-slate-400 transition hover:bg-slate-700 hover:text-slate-200 disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                &laquo;
+              </button>
+
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  className={`flex h-9 w-9 items-center justify-center rounded-lg text-sm font-semibold transition-all ${page === safeCurrentPage
+                    ? "bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30 shadow-sm shadow-emerald-500/10"
+                    : "border border-slate-700/60 bg-slate-800/50 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+                    }`}
+                >
+                  {page}
+                </button>
+              ))}
+
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={safeCurrentPage >= totalPages}
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700/60 bg-slate-800/50 text-sm text-slate-400 transition hover:bg-slate-700 hover:text-slate-200 disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                &raquo;
+              </button>
             </div>
-            <p className="text-sm font-medium text-slate-200">
-              Create Institution
+          )}
+
+          {/* Page info */}
+          {totalPages > 1 && (
+            <p className="mt-3 text-center text-[11px] text-slate-500">
+              Page {safeCurrentPage} of {totalPages} &middot; {filtered.length} group{filtered.length !== 1 ? "s" : ""}
             </p>
-            <p className="mt-1 text-xs text-slate-500">
-              Set up your own campus space
-            </p>
-            <button
-              onClick={() => setShowCreate(true)}
-              className="mt-4 rounded-lg bg-emerald-600/15 px-4 py-2 text-xs font-semibold text-emerald-400 ring-1 ring-emerald-500/20 transition hover:bg-emerald-600/25"
-            >
-              Get Started
-            </button>
-          </motion.div>
-        </div>
+          )}
+        </>
       )}
 
       {/* Create modal */}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ThumbsUp,
@@ -17,6 +17,7 @@ import {
   Search,
   RefreshCw,
   Star,
+  BadgeCheck,
 } from "lucide-react";
 import Link from "next/link";
 import { useUser } from "@/hooks/useUser";
@@ -115,6 +116,30 @@ function PostCard({
   authorName: string;
   authorAvatar: string;
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const [showReadMore, setShowReadMore] = useState(false);
+  const bodyRef = useRef<HTMLParagraphElement>(null);
+
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+
+    // Using a reliable resize observer to determine if native text exceeds ~3 lines (approx 60px).
+    const checkOverflow = () => {
+      if (el.scrollHeight > 65 || el.scrollHeight > el.clientHeight + 2) {
+        setShowReadMore(true);
+      } else {
+        setShowReadMore(false);
+      }
+    };
+
+    const observer = new ResizeObserver(checkOverflow);
+    observer.observe(el);
+    checkOverflow();
+
+    return () => observer.disconnect();
+  }, [post.body]);
+
   const netVotes = post.upvotes_count - post.downvotes_count;
   const netCls = netVotes > 0
     ? "text-emerald-400 bg-emerald-500/10 ring-1 ring-emerald-500/20"
@@ -141,12 +166,18 @@ function PostCard({
         {/* Top row: author + category */}
         <div className="mb-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-indigo-500 to-purple-600 text-xs font-bold text-white shadow-sm">
-              {post.author_avatar}
-            </div>
+            {post.author_avatar && /^https?:\/\//.test(post.author_avatar) ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={post.author_avatar} alt={post.author_name} className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-white/10" />
+            ) : (
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-indigo-500 to-purple-600 text-xs font-bold text-white shadow-sm">
+                {post.author_avatar}
+              </div>
+            )}
             <div>
-              <p className="text-xs font-semibold" style={{ color: "var(--ax-text-primary)" }}>
+              <p className="flex items-center gap-1 text-xs font-semibold" style={{ color: "var(--ax-text-primary)" }}>
                 {post.author_name}
+                {post.is_verified && <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-blue-400" />}
               </p>
               <p className="text-[10px]" style={{ color: "var(--ax-text-faint)" }}>
                 {timeAgo(post.created_at)}
@@ -163,10 +194,28 @@ function PostCard({
           {post.title}
         </h3>
 
-        {/* Body */}
-        <p className="mb-3 line-clamp-2 text-xs leading-relaxed" style={{ color: "var(--ax-text-secondary)" }}>
-          {post.body}
-        </p>
+        {/* Body wrapped in motion for smooth height transition */}
+        <motion.div
+          animate={{ height: expanded ? "auto" : "4.2rem" }}
+          transition={{ duration: 0.3, ease: "easeInOut" }}
+          className="relative overflow-hidden mb-1"
+        >
+          <p ref={bodyRef}
+            className={`text-xs leading-relaxed whitespace-pre-wrap transition-colors duration-300 ${expanded ? "" : "line-clamp-3"}`}
+            style={{ color: "var(--ax-text-secondary)" }}>
+            {post.body}
+          </p>
+        </motion.div>
+
+        {showReadMore && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="mb-3 text-[11px] font-bold text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1"
+          >
+            {expanded ? "Show Less" : "Read More"}
+          </button>
+        )}
+        {!showReadMore && <div className="mb-3" />}
 
         {/* Tags */}
         <div className="mb-4 flex flex-wrap gap-1.5">
@@ -262,6 +311,8 @@ export default function ForumsFeedPage() {
   const [topContributors, setTopContributors] = useState<LeaderboardEntry[]>([]);
   const [openCommentsId, setOpenCommentsId] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(10);
+  const POSTS_PER_PAGE = 10;
   const toast = useToast();
 
   function handleToggleComments(id: string) {
@@ -376,6 +427,9 @@ export default function ForumsFeedPage() {
         p.tags.some((t) => t.toLowerCase().includes(search.toLowerCase()))) &&
       (!activeCategory || p.category === activeCategory),
   );
+
+  const paginatedPosts = filtered.slice(0, visibleCount);
+  const hasMore = visibleCount < filtered.length;
 
   // Extract trending tags from current posts
   const trendingTags = Array.from(
@@ -511,22 +565,42 @@ export default function ForumsFeedPage() {
                   )}
                 </motion.div>
               ) : (
-                filtered.map((post) => (
-                  <PostCard
-                    key={post.id}
-                    post={post}
-                    onVote={handleVote}
-                    onSave={handleSave}
-                    votingId={votingId}
-                    savingId={savingId}
-                    isCommentsOpen={openCommentsId === post.id}
-                    onToggleComments={handleToggleComments}
-                    onCommentAdded={handleCommentAdded}
-                    currentUserId={userId}
-                    authorName={authorName}
-                    authorAvatar={authorAvatar}
-                  />
-                ))
+                <>
+                  {paginatedPosts.map((post) => (
+                    <PostCard
+                      key={post.id}
+                      post={post}
+                      onVote={handleVote}
+                      onSave={handleSave}
+                      votingId={votingId}
+                      savingId={savingId}
+                      isCommentsOpen={openCommentsId === post.id}
+                      onToggleComments={handleToggleComments}
+                      onCommentAdded={handleCommentAdded}
+                      currentUserId={userId}
+                      authorName={authorName}
+                      authorAvatar={authorAvatar}
+                    />
+                  ))}
+                  {hasMore && (
+                    <div className="flex flex-col items-center gap-2 pt-2">
+                      <p className="text-[11px] text-slate-500">
+                        Showing {paginatedPosts.length} of {filtered.length} posts
+                      </p>
+                      <button
+                        onClick={() => setVisibleCount((c) => c + POSTS_PER_PAGE)}
+                        className="flex items-center gap-2 rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-6 py-2.5 text-sm font-semibold text-indigo-400 transition-all hover:bg-indigo-500/20 hover:shadow-[0_0_15px_rgba(99,102,241,0.15)]"
+                      >
+                        Load More
+                      </button>
+                    </div>
+                  )}
+                  {!hasMore && filtered.length > POSTS_PER_PAGE && (
+                    <p className="text-center text-[11px] text-slate-600 pt-2">
+                      All {filtered.length} posts shown
+                    </p>
+                  )}
+                </>
               )}
             </AnimatePresence>
           )}
@@ -566,12 +640,17 @@ export default function ForumsFeedPage() {
                     <span className={"w-5 text-center text-xs font-bold " + rankCls}>
                       #{i + 1}
                     </span>
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-indigo-500 to-purple-600 text-[10px] font-bold text-white shadow-sm">
-                      {c.author_avatar}
-                    </div>
+                    {c.author_avatar && /^https?:\/\//.test(c.author_avatar) ? (
+                      <img src={c.author_avatar} alt={c.author_name} className="h-7 w-7 shrink-0 rounded-full object-cover ring-1 ring-white/10" />
+                    ) : (
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-indigo-500 to-purple-600 text-[10px] font-bold text-white shadow-sm">
+                        {c.author_avatar}
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
-                      <p className="truncate text-xs font-medium text-slate-200">
+                      <p className="flex items-center gap-1 truncate text-xs font-medium text-slate-200">
                         {c.author_name}
+                        {c.is_verified && <BadgeCheck className="h-3 w-3 shrink-0 text-blue-400" />}
                       </p>
                       <p className="text-[10px] text-slate-400">
                         <Star className="inline h-2.5 w-2.5 -mt-0.5 text-amber-500" /> {c.total_rep.toLocaleString()} rep

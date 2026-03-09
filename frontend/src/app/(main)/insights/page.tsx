@@ -232,8 +232,20 @@ export default function InsightsPage() {
       }));
 
       let plans: SavedPlan[] = [];
-      try { const raw = localStorage.getItem("academix_plans"); if (raw) plans = JSON.parse(raw) as SavedPlan[]; }
-      catch { /* ignore */ }
+      try {
+        const { data: dbPlans } = await supabase
+          .from("study_plans")
+          .select("id,name,created_at,target_date,daily_hours,plan_data")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false });
+        if (dbPlans) {
+          plans = dbPlans.map((p: any) => ({
+            id: p.id, name: p.name, createdAt: p.created_at,
+            targetDate: p.target_date, dailyHours: p.daily_hours ?? 1,
+            plan: p.plan_data ?? { feasible: true, schedule: [], overallStrategy: "" },
+          }));
+        }
+      } catch { /* ignore */ }
 
       setData({ forumPosts: posts, libraryNotes: notes, plans, groupCount: myGroups.length, pendingCount: pending, submittedCount: submitted });
     } catch (e) { console.error("Insights load:", e); }
@@ -359,7 +371,7 @@ export default function InsightsPage() {
               </div>
             ) : (
               <div className="flex flex-col gap-5">
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <MetricCell label="Posts" value={data?.forumPosts.length ?? 0} color="text-purple-500" />
                   <MetricCell label="Upvotes" value={totalUpvotes} color="text-blue-500" />
                   <MetricCell label="Replies" value={totalComments} color="text-emerald-500" />
@@ -392,7 +404,7 @@ export default function InsightsPage() {
               </div>
             ) : (
               <div className="flex flex-col gap-5">
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <MetricCell label="Files" value={data?.libraryNotes.length ?? 0} color="text-amber-500" />
                   <MetricCell label="Views" value={totalViews} color="text-blue-500" />
                   <MetricCell label="Downloads" value={totalDownloads} color="text-emerald-500" />
@@ -419,7 +431,7 @@ export default function InsightsPage() {
 
           {/* Campus Summary */}
           <Section icon={School} title="Campus Summary" color="text-emerald-500" href="/campus/my-campus" delay={0.30}>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <MetricCell label="Groups Joined" value={data?.groupCount ?? 0} color="text-emerald-600" />
               <MetricCell label="Pending Tasks" value={data?.pendingCount ?? 0} color="text-blue-600" />
               <MetricCell label="Submitted Work" value={data?.submittedCount ?? 0} color="text-teal-600" />

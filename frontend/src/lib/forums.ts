@@ -9,7 +9,8 @@ export interface ForumPost {
   id: string;
   user_id: string;
   author_name: string;
-  author_avatar: string; // 2-char initials
+  author_avatar: string; // URL or initials
+  is_verified?: boolean;
   title: string;
   body: string;
   tags: string[];
@@ -47,6 +48,28 @@ export function timeAgo(dateStr: string): string {
   return "just now";
 }
 
+// ─── Profile Enrichment ───────────────────────────────────────────────────────
+
+async function enrichWithProfiles<T extends { user_id: string; author_name: string; author_avatar: string; is_verified?: boolean }>(
+  items: T[]
+): Promise<T[]> {
+  if (!items.length) return [];
+  const userIds = [...new Set(items.map(i => i.user_id))];
+  const { data: profiles } = await supabase
+    .from("user_profiles")
+    .select("id, display_name, avatar_url, is_verified")
+    .in("id", userIds);
+
+  const profileMap = new Map((profiles ?? []).map(p => [p.id, p]));
+
+  return items.map(item => {
+    const prof = profileMap.get(item.user_id);
+    const name = prof?.display_name || item.author_name;
+    const avatar = prof?.avatar_url || (name.split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2));
+    return { ...item, author_name: name, author_avatar: avatar, is_verified: prof?.is_verified ?? false };
+  });
+}
+
 // ─── Fetch all posts ──────────────────────────────────────────────────────────
 
 export async function fetchPosts(
@@ -77,11 +100,13 @@ export async function fetchPosts(
     throw new Error(error.message);
   }
 
-  const posts: ForumPost[] = (data ?? []).map((p) => ({
+  const rawPosts: ForumPost[] = (data ?? []).map((p) => ({
     ...p,
     userVote: null,
     saved: false,
   }));
+
+  const posts = await enrichWithProfiles(rawPosts);
 
   if (!userId || posts.length === 0) return posts;
 
@@ -127,7 +152,8 @@ export async function fetchMyPosts(userId: string): Promise<ForumPost[]> {
     return [];
   }
 
-  return (data ?? []).map((p) => ({ ...p, userVote: null, saved: false }));
+  const rawPosts = (data ?? []).map((p) => ({ ...p, userVote: null, saved: false }));
+  return enrichWithProfiles(rawPosts);
 }
 
 // ─── Fetch saved posts for user ───────────────────────────────────────────────
@@ -153,7 +179,8 @@ export async function fetchSavedPosts(userId: string): Promise<ForumPost[]> {
     return [];
   }
 
-  return (data ?? []).map((p) => ({ ...p, userVote: null, saved: true }));
+  const rawPosts = (data ?? []).map((p) => ({ ...p, userVote: null, saved: true }));
+  return enrichWithProfiles(rawPosts);
 }
 
 // ─── Create a post ────────────────────────────────────────────────────────────
@@ -241,6 +268,7 @@ export interface LeaderboardEntry {
   user_id: string;
   author_name: string;
   author_avatar: string;
+  is_verified?: boolean;
   total_rep: number;
   posts: number;
   total_upvotes: number;
@@ -279,9 +307,12 @@ export async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {
       (row.downvotes_count ?? 0) * 2;            // -2 per downvote received (karma decay)
   }
 
-  return Object.values(map)
+  const rawEntries = Object.values(map)
     .map((e) => ({ ...e, total_rep: Math.max(0, e.total_rep) })) // floor at 0
     .sort((a, b) => b.total_rep - a.total_rep);
+
+  // Use the same profile enrichment!
+  return enrichWithProfiles(rawEntries) as Promise<LeaderboardEntry[]>;
 }
 
 // ─── Comments ─────────────────────────────────────────────────────────────────
@@ -329,9 +360,12 @@ export async function fetchComments(
     for (const v of votes ?? []) voteMap[v.comment_id] = v.vote_type;
   }
 
+  // Enrich base comments with latest profiles (avatars & names)
+  const enrichedComments = await enrichWithProfiles((data ?? []) as ForumComment[]);
+
   // Nest replies under their parent
   const map: Record<string, ForumComment> = {};
-  for (const c of (data ?? []) as ForumComment[]) {
+  for (const c of enrichedComments) {
     map[c.id] = { ...c, userVote: voteMap[c.id] ?? null, replies: [] };
   }
   const roots: ForumComment[] = [];

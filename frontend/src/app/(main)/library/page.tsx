@@ -17,10 +17,12 @@ import {
   Clock,
   ChevronDown,
   Bookmark,
+  BadgeCheck,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { logUniqueView, logUniqueDownload, rateNote, getUserBookmarks, toggleBookmarkServer } from "@/lib/interactions";
-import PdfThumbnail from "@/components/PdfThumbnail";
+import dynamic from "next/dynamic";
+const PdfThumbnail = dynamic(() => import("@/components/PdfThumbnail"), { ssr: false, loading: () => <div className="h-full w-full bg-slate-800 animate-pulse" /> });
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -28,6 +30,7 @@ interface Note {
   id: string;
   user_id: string;
   uploader_name: string | null;
+  uploader_avatar?: string | null;
   title: string;
   subject: string;
   file_url: string;
@@ -36,6 +39,7 @@ interface Note {
   avg_rating: number | null;
   views_count: number | null;
   created_at: string | null;
+  is_verified?: boolean;
 }
 
 const SUBJECTS = [
@@ -290,8 +294,9 @@ function DetailModal({
   toggleBookmark: () => void;
   onDownload: () => void;
 }) {
+  const nameStr = note.uploader_name || "Unknown User";
+  const initials = nameStr.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
   const color = SUBJECT_COLOR[note.subject];
-  const avatar = note.user_id?.slice(-2, -1).toUpperCase() || "U";
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -338,15 +343,20 @@ function DetailModal({
           <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
             {/* Uploader */}
             <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500/10 text-sm font-bold text-blue-400 ring-1 ring-blue-500/20">
-                {avatar}
-              </div>
+              {note.uploader_avatar ? (
+                <img src={note.uploader_avatar} alt={nameStr} className="h-10 w-10 sm:h-11 sm:w-11 object-cover rounded-xl sm:rounded-2xl ring-1 ring-white/10" />
+              ) : (
+                <div className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-xl sm:rounded-2xl bg-blue-500/10 text-xs sm:text-sm font-bold text-blue-400 ring-1 ring-blue-500/20">
+                  {initials}
+                </div>
+              )}
               <div>
                 <a
                   href={`/search?q=${encodeURIComponent(note.uploader_name ?? note.user_id ?? "")}`}
-                  className="text-[13px] font-semibold text-blue-400 hover:underline transition-colors"
+                  className="inline-flex items-center gap-1 text-[13px] font-semibold text-blue-400 hover:underline transition-colors"
                 >
                   {note.uploader_name ?? note.user_id?.slice(0, 16)}
+                  {note.is_verified && <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-blue-400" />}
                 </a>
                 <p className="text-[10px] text-slate-500">Tap to view profile</p>
               </div>
@@ -474,6 +484,8 @@ export default function ExplorePage() {
   const { ratings, rate, busy } = useRating(userId, setNotes);
   const { bookmarks, toggleBookmark } = useBookmarks(userId);
   const { viewedNotes, downloadedNotes, markViewed, markDownloaded } = useTrackedInteractions(userId);
+  const [visibleCount, setVisibleCount] = useState(12);
+  const NOTES_PER_PAGE = 12;
 
   const fetchNotes = useCallback(async () => {
     setLoading(true);
@@ -491,8 +503,28 @@ export default function ExplorePage() {
       if (search.trim())
         q = q.or(`title.ilike.%${search}%,subject.ilike.%${search}%`);
       const { data, error } = await q;
-      if (error) console.error("[Explore]", error.message);
-      else setNotes((data as Note[]) ?? []);
+      if (error) {
+        console.error("[Explore]", error.message);
+      } else {
+        const rawNotes = (data as Note[]) ?? [];
+        if (rawNotes.length > 0) {
+          const uids = Array.from(new Set(rawNotes.map((n) => n.user_id)));
+          const { data: profs } = await supabase.from("user_profiles").select("id, display_name, avatar_url, is_verified").in("id", uids);
+          const pMap = new Map((profs || []).map((p) => [p.id, p]));
+          const enriched = rawNotes.map((n) => {
+            const p = pMap.get(n.user_id);
+            return {
+              ...n,
+              uploader_name: p?.display_name || n.uploader_name,
+              uploader_avatar: p?.avatar_url,
+              is_verified: p?.is_verified ?? false,
+            };
+          });
+          setNotes(enriched);
+        } else {
+          setNotes([]);
+        }
+      }
     } finally {
       setLoading(false);
     }
@@ -703,126 +735,151 @@ export default function ExplorePage() {
 
       {/* ── Cards Grid ── */}
       {!loading && notes.length > 0 && (
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {notes.map((note, i) => {
-            const color = SUBJECT_COLOR[note.subject];
-            const avatar = note.user_id?.slice(-2, -1).toUpperCase() || "U";
-            const dl = note.downloads_count ?? 0;
-            const avgR = note.avg_rating ?? 0;
-            return (
-              <motion.div
-                key={note.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.04, type: "spring", damping: 20 }}
-                whileHover={{ y: -4 }}
-                className="ax-card group flex flex-col overflow-hidden border-b-4"
-                style={{ borderBottomColor: color?.dot ? `var(--${color.dot.replace('bg-', '')})` : "var(--ax-border-light)" }}
-              >
-                {/* ── PDF Thumbnail ── */}
-                <div
-                  className="relative h-36 cursor-pointer overflow-hidden"
-                  onClick={() => handleView(note)}
+        <>
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {notes.slice(0, visibleCount).map((note, i) => {
+              const color = SUBJECT_COLOR[note.subject];
+              const nameStr = note.uploader_name || "Unknown User";
+              const initials = nameStr.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
+              const dl = note.downloads_count ?? 0;
+              const avgR = note.avg_rating ?? 0;
+              return (
+                <motion.div
+                  key={note.id}
+                  layoutId={note.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.04, type: "spring", damping: 20 }}
+                  whileHover={{ y: -4 }}
+                  className="ax-card group flex flex-col overflow-hidden border-b-4"
+                  style={{ borderBottomColor: color?.dot ? `var(--${color.dot.replace('bg-', '')})` : "var(--ax-border-light)" }}
                 >
-                  <PdfThumbnail
-                    url={note.file_url}
-                    className="h-full w-full"
-                    accentColor={color?.text ?? "text-slate-500"}
-                    gradientClass="from-black/40 to-transparent"
-                  />
-                  {/* Hover overlay */}
-                  <div className="absolute inset-0 flex items-center justify-center bg-linear-to-t from-black/70 via-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300">
-                    <motion.span
-                      whileHover={{ scale: 1.05 }}
-                      className="flex items-center gap-1.5 rounded-full bg-slate-800 px-5 py-2 text-xs font-bold text-white shadow-xl"
-                    >
-                      <Eye className="h-3.5 w-3.5" /> Preview
-                    </motion.span>
-                  </div>
-                  {/* Bookmark Button */}
-                  <button
-                    onClick={(e) => { e.stopPropagation(); toggleBookmark(note.id); }}
-                    className={`absolute top-3 right-3 z-10 p-2 rounded-xl backdrop-blur-md transition-all ${bookmarks.has(note.id) ? "bg-rose-500/90 text-white shadow-lg shadow-rose-500/30 ring-1 ring-rose-400" : "bg-black/40 text-slate-300 hover:bg-black/60 ring-1 ring-white/10 opacity-0 group-hover:opacity-100"}`}
+                  {/* ── PDF Thumbnail ── */}
+                  <div
+                    className="relative h-36 cursor-pointer overflow-hidden"
+                    onClick={() => handleView(note)}
                   >
-                    <Bookmark className={`h-4 w-4 ${bookmarks.has(note.id) ? "fill-current" : ""}`} />
-                  </button>
-                </div>
-
-                {/* ── Body ── */}
-                <div className="flex flex-1 flex-col p-4">
-                  {/* Subject */}
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <span
-                      className={`h-1.5 w-1.5 rounded-full ${color?.dot ?? "bg-slate-500"}`}
+                    <PdfThumbnail
+                      url={note.file_url}
+                      className="h-full w-full"
+                      accentColor={color?.text ?? "text-slate-500"}
+                      gradientClass="from-black/40 to-transparent"
                     />
-                    <span
-                      className={`text-[10px] font-bold uppercase tracking-[0.15em] ${color?.text ?? "text-slate-400"}`}
+                    {/* Hover overlay */}
+                    <div className="absolute inset-0 flex items-center justify-center bg-linear-to-t from-black/70 via-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300">
+                      <motion.span
+                        whileHover={{ scale: 1.05 }}
+                        className="flex items-center gap-1.5 rounded-full bg-slate-800 px-5 py-2 text-xs font-bold text-white shadow-xl"
+                      >
+                        <Eye className="h-3.5 w-3.5" /> Preview
+                      </motion.span>
+                    </div>
+                    {/* Bookmark Button */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); toggleBookmark(note.id); }}
+                      className={`absolute top-3 right-3 z-10 p-2 rounded-xl backdrop-blur-md transition-all ${bookmarks.has(note.id) ? "bg-rose-500/90 text-white shadow-lg shadow-rose-500/30 ring-1 ring-rose-400" : "bg-black/40 text-slate-300 hover:bg-black/60 ring-1 ring-white/10 opacity-0 group-hover:opacity-100"}`}
                     >
-                      {note.subject}
-                    </span>
+                      <Bookmark className={`h-4 w-4 ${bookmarks.has(note.id) ? "fill-current" : ""}`} />
+                    </button>
                   </div>
 
-                  {/* Title */}
-                  <h3
-                    className="line-clamp-2 text-[13px] font-semibold leading-snug cursor-pointer hover:text-amber-400 transition-colors"
-                    style={{ color: "var(--ax-text-primary)" }}
-                    onClick={() => handleView(note)}
-                  >
-                    {note.title}
-                  </h3>
-
-                  {/* Inline rating */}
-                  {avgR > 0 && (
-                    <div className="mt-2 flex items-center gap-1.5">
-                      <StarRow value={Math.round(avgR)} disabled size={11} />
-                      <span className="text-[10px] font-semibold text-amber-400/80">
-                        {avgR.toFixed(1)}
+                  {/* ── Body ── */}
+                  <div className="flex flex-1 flex-col p-4">
+                    {/* Subject */}
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full ${color?.dot ?? "bg-slate-500"}`}
+                      />
+                      <span
+                        className={`text-[10px] font-bold uppercase tracking-[0.15em] ${color?.text ?? "text-slate-400"}`}
+                      >
+                        {note.subject}
                       </span>
                     </div>
-                  )}
 
-                  {/* Meta */}
-                  <div className="mt-auto pt-3 flex items-center gap-2" style={{ borderTop: "1px solid var(--ax-border)" }}>
-                    <div className="flex h-5 w-5 items-center justify-center rounded-md bg-amber-500/10 text-[9px] font-bold text-amber-400">
-                      {avatar}
-                    </div>
-                    <span className="flex-1 truncate text-[10px]" style={{ color: "var(--ax-text-faint)" }}>
-                      {note.uploader_name ?? note.user_id?.slice(0, 12)}
-                    </span>
-                    <div className="flex items-center gap-2 text-[10px]" style={{ color: "var(--ax-text-faint)" }}>
-                      <span className="flex items-center gap-0.5" title="Views">
-                        <Eye className="h-2.5 w-2.5" />
-                        {note.views_count ?? 0}
+                    {/* Title */}
+                    <h3
+                      className="line-clamp-2 text-[13px] font-semibold leading-snug cursor-pointer hover:text-amber-400 transition-colors"
+                      style={{ color: "var(--ax-text-primary)" }}
+                      onClick={() => handleView(note)}
+                    >
+                      {note.title}
+                    </h3>
+
+                    {/* Inline rating */}
+                    {avgR > 0 && (
+                      <div className="mt-2 flex items-center gap-1.5">
+                        <StarRow value={Math.round(avgR)} disabled size={11} />
+                        <span className="text-[10px] font-semibold text-amber-400/80">
+                          {avgR.toFixed(1)}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Meta */}
+                    <div className="mt-auto pt-3 flex items-center gap-2" style={{ borderTop: "1px solid var(--ax-border)" }}>
+                      {note.uploader_avatar ? (
+                        <img src={note.uploader_avatar} alt={nameStr} className="h-5 w-5 rounded-md object-cover" />
+                      ) : (
+                        <div className="flex h-5 w-5 items-center justify-center rounded-md bg-amber-500/10 text-[9px] font-bold text-amber-400">
+                          {initials}
+                        </div>
+                      )}
+                      <span className="flex items-center gap-1 flex-1 truncate text-[10px]" style={{ color: "var(--ax-text-faint)" }}>
+                        {note.uploader_name ?? note.user_id?.slice(0, 12)}
+                        {note.is_verified && <BadgeCheck className="h-3 w-3 shrink-0 text-blue-400" />}
                       </span>
-                      <span className="flex items-center gap-0.5" title="Downloads">
-                        <Download className="h-2.5 w-2.5" />
-                        {dl}
-                      </span>
+                      <div className="flex items-center gap-2 text-[10px]" style={{ color: "var(--ax-text-faint)" }}>
+                        <span className="flex items-center gap-0.5" title="Views">
+                          <Eye className="h-2.5 w-2.5" />
+                          {note.views_count ?? 0}
+                        </span>
+                        <span className="flex items-center gap-0.5" title="Downloads">
+                          <Download className="h-2.5 w-2.5" />
+                          {dl}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Action bar */}
-                <div className="flex" style={{ borderTop: "1px solid var(--ax-border)" }}>
-                  <button
-                    onClick={() => handleView(note)}
-                    className="flex flex-1 items-center justify-center gap-1.5 py-2.5 text-[11px] font-semibold transition-all hover:bg-[var(--ax-surface-hover)] hover:text-amber-400"
-                    style={{ color: "var(--ax-text-muted)", borderRight: "1px solid var(--ax-border)" }}
-                  >
-                    <Eye className="h-3 w-3" /> Preview
-                  </button>
-                  <button
-                    onClick={() => handleDownload(note)}
-                    className="flex flex-1 items-center justify-center gap-1.5 py-2.5 text-[11px] font-semibold transition-all hover:bg-[var(--ax-surface-hover)] hover:text-amber-400"
-                    style={{ color: "var(--ax-text-muted)" }}
-                  >
-                    <Download className="h-3 w-3" /> Download
-                  </button>
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
+                  {/* Action bar */}
+                  <div className="flex" style={{ borderTop: "1px solid var(--ax-border)" }}>
+                    <button
+                      onClick={() => handleView(note)}
+                      className="flex flex-1 items-center justify-center gap-1.5 py-2.5 text-[11px] font-semibold transition-all hover:bg-[var(--ax-surface-hover)] hover:text-amber-400"
+                      style={{ color: "var(--ax-text-muted)", borderRight: "1px solid var(--ax-border)" }}
+                    >
+                      <Eye className="h-3 w-3" /> Preview
+                    </button>
+                    <button
+                      onClick={() => handleDownload(note)}
+                      className="flex flex-1 items-center justify-center gap-1.5 py-2.5 text-[11px] font-semibold transition-all hover:bg-[var(--ax-surface-hover)] hover:text-amber-400"
+                      style={{ color: "var(--ax-text-muted)" }}
+                    >
+                      <Download className="h-3 w-3" /> Download
+                    </button>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+
+          {/* Load More */}
+          {visibleCount < notes.length && (
+            <div className="flex flex-col items-center gap-2 pt-6">
+              <p className="text-[11px] text-slate-500">Showing {Math.min(visibleCount, notes.length)} of {notes.length} notes</p>
+              <button
+                onClick={() => setVisibleCount((c) => c + NOTES_PER_PAGE)}
+                className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-6 py-2.5 text-sm font-semibold text-amber-400 transition-all hover:bg-amber-500/20 hover:shadow-[0_0_15px_rgba(245,158,11,0.15)]"
+              >
+                Load More Notes
+              </button>
+            </div>
+          )}
+          {visibleCount >= notes.length && notes.length > NOTES_PER_PAGE && (
+            <p className="text-center text-[11px] text-slate-600 pt-4">All {notes.length} notes shown</p>
+          )}
+        </>
       )}
 
       <AnimatePresence>

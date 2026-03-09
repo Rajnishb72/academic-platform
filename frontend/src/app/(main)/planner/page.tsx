@@ -357,6 +357,10 @@ function AiRoadmapCard({ onPlanGenerated }: { onPlanGenerated?: (plan: SavedPlan
   // --- Generate schedule ---
   async function handleGenerate() {
     if (!planName || planDays < 1 || chapters.length === 0) return;
+    if (!user?.id) {
+      setExtractError("Please sign in to generate and save a study plan.");
+      return;
+    }
     setPhase("generating"); setExtractError(null);
     const targetDateObj = new Date();
     targetDateObj.setDate(targetDateObj.getDate() + planDays);
@@ -378,8 +382,6 @@ function AiRoadmapCard({ onPlanGenerated }: { onPlanGenerated?: (plan: SavedPlan
       setGeneratedPlan(plan);
 
       // Save to Supabase and let DB auto-generate UUID
-      if (!user?.id) throw new Error("Authentication required to save plan");
-
       const { data: insertedPlan, error: dbErr } = await supabase.from("study_plans").insert({
         user_id: user.id, name: planName,
         target_date: targetDate, daily_hours: dailyHours, intensity, plan_data: plan,
@@ -534,7 +536,7 @@ function AiRoadmapCard({ onPlanGenerated }: { onPlanGenerated?: (plan: SavedPlan
       {/* How It Works */}
       {phase === "idle" && (
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-          className="grid grid-cols-3 gap-4">
+          className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {STEP_ITEMS.map((step, i) => (
             <div key={step.title} className="relative flex flex-col items-center text-center rounded-2xl border border-slate-800 bg-slate-900/50 p-5 hover:border-violet-500/30 transition-all duration-300 group"
               style={{ backdropFilter: "blur(8px)" }}>
@@ -888,7 +890,7 @@ export default function PlannerPage() {
         </div>
 
         {/* ── Sub-Module Navigation ── */}
-        <nav className="flex w-full" aria-label="Planner navigation">
+        <nav className="flex w-full overflow-x-auto scrollbar-hide border-b" style={{ borderColor: "var(--ax-border)" }} aria-label="Planner navigation">
           {SUB_NAV.map(({ label, icon: Icon, desc }) => {
             const isActive = activeTab === label;
             return (
@@ -896,14 +898,13 @@ export default function PlannerPage() {
                 key={label}
                 suppressHydrationWarning
                 onClick={() => setActiveTab(label)}
-                className={`relative flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium whitespace-nowrap transition-all duration-200 ${isActive ? "" : "hover:bg-[var(--ax-surface-3)]"}`}
+                className={`relative flex shrink-0 items-center justify-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap transition-all duration-200 ${isActive ? "" : "hover:bg-[var(--ax-surface-3)]"}`}
                 style={{ color: isActive ? "var(--ax-text-primary)" : "var(--ax-text-muted)" }}
               >
                 {isActive && (
                   <motion.span
                     layoutId="planner-tab-pill"
-                    className="absolute inset-0 rounded-lg"
-                    style={{ background: "rgba(139, 92, 246, 0.1)", border: "1px solid rgba(139, 92, 246, 0.2)" }}
+                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-violet-500 rounded-t-full"
                     transition={{ type: "spring", stiffness: 400, damping: 30 }}
                   />
                 )}
@@ -1710,10 +1711,10 @@ function MilestonesTab({ savedPlans, userId }: { savedPlans: SavedPlan[]; userId
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: idx * 0.04 }}
                 className={`relative flex flex-col items-center rounded-xl border p-3 text-center transition-all duration-300 ${isCurrentRank
-                    ? `border-slate-600 bg-slate-800 ring-1 ring-slate-500 shadow-md ${rank.glow}`
-                    : isLocked
-                      ? "border-slate-800/50 bg-slate-900/30 opacity-40"
-                      : "border-slate-700 bg-slate-800/80 opacity-80"
+                  ? `border-slate-600 bg-slate-800 ring-1 ring-slate-500 shadow-md ${rank.glow}`
+                  : isLocked
+                    ? "border-slate-800/50 bg-slate-900/30 opacity-40"
+                    : "border-slate-700 bg-slate-800/80 opacity-80"
                   }`}
               >
                 {isCurrentRank && (

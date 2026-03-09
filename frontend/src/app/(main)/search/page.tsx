@@ -18,6 +18,7 @@ import {
   UserCircle,
   Users,
   X,
+  BadgeCheck,
 } from "lucide-react";
 import {
   globalSearch,
@@ -92,8 +93,9 @@ function UserCard({ user }: { user: SearchUser }) {
       >
         <Avatar src={user.avatar_url} name={name} size={40} />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-slate-200 group-hover:text-blue-400 transition">
+          <p className="flex items-center gap-1 truncate text-sm font-semibold text-slate-200 group-hover:text-blue-400 transition">
             {name}
+            {user.is_verified && <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-blue-400" />}
           </p>
           <p className="text-xs text-slate-500">
             {user.username ? `@${user.username}` : "View profile"}

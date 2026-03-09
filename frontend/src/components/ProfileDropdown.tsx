@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useUser } from "@/hooks/useUser";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { LogOut, Settings, ChevronUp, ShieldCheck, ShieldOff, Eye, EyeOff, X, Lock } from "lucide-react";
+import { LogOut, Settings, ChevronUp, ShieldCheck, ShieldOff, Eye, EyeOff, X, Lock, BadgeCheck } from "lucide-react";
+import Image from "next/image";
 import { fetchProfile } from "@/lib/profile";
 import { isAdminSession, loginAdmin, logoutAdmin } from "@/lib/admin";
 import { createClient } from "@/lib/supabase/client";
@@ -24,11 +25,31 @@ export function ProfileDropdown({ variant = "header", onNavigate }: Props) {
   const [adminPwd, setAdminPwd] = useState("");
   const [adminError, setAdminError] = useState("");
   const [showPwd, setShowPwd] = useState(false);
+  const [isVerified, setIsVerified] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!user?.id) return;
-    fetchProfile(user.id).then((p) => { if (p?.avatar_url) setAvatarUrl(p.avatar_url); });
+    fetchProfile(user.id).then((p) => {
+      if (p?.avatar_url) setAvatarUrl(p.avatar_url);
+      setIsVerified(p?.is_verified ?? false);
+    });
+
+    // Subscribe to realtime avatar changes so sidebar/header refresh instantly
+    const sb = createClient();
+    const channel = sb
+      .channel("profile-avatar-sync")
+      .on(
+        "postgres_changes" as any,
+        { event: "UPDATE", schema: "public", table: "user_profiles", filter: `id=eq.${user.id}` },
+        (payload: any) => {
+          const newAvatar = payload.new?.avatar_url;
+          if (newAvatar) setAvatarUrl(newAvatar);
+        },
+      )
+      .subscribe();
+
+    return () => { sb.removeChannel(channel); };
   }, [user?.id]);
 
   useEffect(() => {
@@ -60,9 +81,8 @@ export function ProfileDropdown({ variant = "header", onNavigate }: Props) {
     const style = { width: size, height: size, minWidth: size, minHeight: size };
     if (avatarUrl || user?.imageUrl) {
       return (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={avatarUrl ?? user?.imageUrl} alt={displayName} style={style}
-          className="rounded-full object-cover ring-2 ring-slate-700" />
+        <Image src={avatarUrl ?? user?.imageUrl ?? ""} alt={displayName} width={size} height={size} style={style}
+          className="rounded-full object-cover ring-2 ring-slate-700" unoptimized />
       );
     }
     return (
@@ -105,7 +125,10 @@ export function ProfileDropdown({ variant = "header", onNavigate }: Props) {
       {/* User info */}
       <div className="px-4 py-3" style={{ borderBottom: "1px solid var(--ax-border)" }}>
         <div className="flex items-center gap-2">
-          <p className="truncate text-sm font-semibold" style={{ color: "var(--ax-text-primary)" }}>{displayName}</p>
+          <p className="flex items-center gap-1 truncate text-sm font-semibold" style={{ color: "var(--ax-text-primary)" }}>
+            {displayName}
+            {isVerified && <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-blue-400" />}
+          </p>
           {isAdmin && (
             <span className="flex items-center gap-1 rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-bold text-amber-400 ring-1 ring-amber-500/30">
               <ShieldCheck className="h-2.5 w-2.5" /> ADMIN
@@ -140,6 +163,11 @@ export function ProfileDropdown({ variant = "header", onNavigate }: Props) {
             <Lock className="h-4 w-4" /> Admin Login
           </button>
         )}
+
+        <Link href="/about" onClick={() => { setOpen(false); onNavigate?.(); }}
+          className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-slate-300 transition hover:bg-slate-800 hover:text-white">
+          <Eye className="h-4 w-4 text-slate-500" /> About Us
+        </Link>
 
         <div className="my-1 border-t border-slate-800" />
         <button onClick={handleSignOut}
@@ -200,7 +228,10 @@ export function ProfileDropdown({ variant = "header", onNavigate }: Props) {
             className="flex w-full items-center gap-3 rounded-xl px-2 py-2 transition hover:bg-slate-800/60">
             {renderAvatar(34)}
             <div className="min-w-0 flex-1 text-left">
-              <p className="truncate text-sm font-medium text-slate-200">{displayName}</p>
+              <p className="flex items-center gap-1 truncate text-sm font-medium text-slate-200">
+                {displayName}
+                {isVerified && <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-blue-400" />}
+              </p>
               <p className="truncate text-xs text-slate-500">{isAdmin ? "🛡️ Admin Mode" : "Scholar Profile"}</p>
             </div>
             <ChevronUp className={`h-3.5 w-3.5 shrink-0 text-slate-600 transition-transform ${open ? "rotate-180" : ""}`} />

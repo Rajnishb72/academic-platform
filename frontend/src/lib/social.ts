@@ -6,6 +6,7 @@ export interface SocialProfile {
   id: string;
   display_name: string | null;
   avatar_url: string | null;
+  is_verified?: boolean;
 }
 
 export interface FollowEntry {
@@ -30,7 +31,7 @@ async function getProfiles(
   if (!ids.length) return {};
   const { data } = await supabase
     .from("user_profiles")
-    .select("id,display_name,avatar_url")
+    .select("id,display_name,avatar_url,is_verified")
     .in("id", ids);
   const map: Record<string, SocialProfile> = {};
   for (const p of data ?? []) map[p.id] = p;
@@ -226,6 +227,7 @@ export interface SearchUser {
   display_name: string | null;
   avatar_url: string | null;
   username: string | null;
+  is_verified?: boolean;
 }
 
 export interface SearchMaterial {
@@ -263,7 +265,7 @@ export async function getAllUsers(page: number = 1, limit: number = 20): Promise
 
   const { data, count } = await supabase
     .from("user_profiles")
-    .select("id,display_name,avatar_url,username", { count: "exact" })
+    .select("id,display_name,avatar_url,username,is_verified", { count: "exact" })
     .order("display_name", { ascending: true })
     .range(from, to);
 
@@ -280,11 +282,11 @@ export async function globalSearch(q: string): Promise<SearchResults> {
   const [usersRes, matRes, grpRes] = await Promise.all([
     supabase
       .from("user_profiles")
-      .select("id,display_name,avatar_url,username")
+      .select("id,display_name,avatar_url,username,is_verified")
       .or(`display_name.ilike.${term},username.ilike.${term}`)
       .limit(20),
     supabase
-      .from("library_items")
+      .from("notes")
       .select("id,title,subject,summary,user_id,created_at,file_url,views_count,downloads_count")
       .eq("is_public", true)
       .or(`title.ilike.${term},subject.ilike.${term}`)
@@ -335,25 +337,24 @@ export async function globalSearch(q: string): Promise<SearchResults> {
 
 /** Fetch a single user's public profile + their content */
 export async function fetchPublicProfile(userId: string) {
-  const [profileRes, postsRes, materialsRes, notesRes, groupsRes, submissionsRes, plannerProofsRes, likeCountRes] = await Promise.all([
+  const [profileRes, postsRes, notesRes, groupsRes, submissionsRes, plannerProofsRes, likeCountRes] = await Promise.all([
     supabase.from("user_profiles").select("id,display_name,avatar_url,is_verified").eq("id", userId).maybeSingle(),
     supabase.from("forum_posts").select("id,title,created_at,upvotes_count,comments_count,category").eq("user_id", userId).order("created_at", { ascending: false }).limit(50),
-    supabase.from("library_items").select("id,title,subject,created_at,views_count,downloads_count,file_url").eq("user_id", userId).eq("is_public", true).order("created_at", { ascending: false }).limit(50),
-    supabase.from("notes").select("id,title,subject,created_at,views_count,downloads_count").eq("user_id", userId).eq("is_public", true).order("created_at", { ascending: false }).limit(50),
+    supabase.from("notes").select("id,title,subject,created_at,views_count,downloads_count,file_url").eq("user_id", userId).eq("is_public", true).order("created_at", { ascending: false }).limit(50),
     supabase.from("campus_members").select("institution_id", { count: "exact" }).eq("user_id", userId).eq("status", "active"),
-    supabase.from("campus_submissions").select("id", { count: "exact" }).eq("student_id", userId),
+    supabase.from("campus_submissions").select("id", { count: "exact" }).eq("user_id", userId),
     supabase.from("plan_proofs").select("id", { count: "exact" }).eq("user_id", userId),
     supabase.from("profile_likes").select("id", { count: "exact" }).eq("liked_id", userId),
   ]);
 
-  const allMaterials = [...(materialsRes.data ?? []), ...(notesRes.data ?? [])];
+  const materials = (notesRes.data ?? []);
   const seen = new Set<string>();
-  const materials = allMaterials.filter((m) => { if (seen.has(m.id)) return false; seen.add(m.id); return true; });
+  const dedupedMaterials = materials.filter((m) => { if (seen.has(m.id)) return false; seen.add(m.id); return true; });
 
   return {
     profile: profileRes.data as (SearchUser & { is_verified?: boolean }) | null,
     forumPosts: (postsRes.data ?? []) as { id: string; title: string; created_at: string; upvotes_count: number; comments_count: number; category?: string }[],
-    materials: materials as { id: string; title: string; subject: string; created_at: string; views_count?: number; downloads_count?: number; file_url?: string }[],
+    materials: dedupedMaterials as { id: string; title: string; subject: string; created_at: string; views_count?: number; downloads_count?: number; file_url?: string }[],
     groupCount: groupsRes.count ?? 0,
     submittedCount: (submissionsRes.count ?? 0) + (plannerProofsRes.count ?? 0),
     likeCount: likeCountRes.count ?? 0,

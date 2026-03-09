@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useUser } from "@/hooks/useUser";
 import { ProfileDropdown } from "@/components/ProfileDropdown";
+
 import { MessagingPanel } from "@/components/MessagingPanel";
 import { NotificationsPanel } from "@/components/NotificationsPanel";
 import { ensureProfile } from "@/lib/profile";
@@ -410,19 +411,19 @@ const MOBILE_TABS = [
 function MobileBottomNav({ onMoreClick }: { onMoreClick: () => void }) {
   const pathname = usePathname();
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 flex lg:hidden h-16 items-stretch border-t safe-area-pb"
-      style={{ borderColor: "var(--ax-border)", background: "rgba(5, 8, 22, 0.92)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}
+    <nav className="fixed bottom-0 left-0 right-0 z-40 flex lg:hidden h-16 items-stretch border-t pb-[env(safe-area-inset-bottom)]"
+      style={{ borderColor: "var(--ax-border)", background: "rgba(5, 8, 22, 0.95)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}
       aria-label="Mobile navigation">
       {MOBILE_TABS.map(({ label, href, icon: Icon }) => {
         const isActive = pathname === href || pathname.startsWith(href + "/");
         return (
           <Link key={href} href={href}
-            className={`flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors
+            className={`flex flex-1 flex-col items-center justify-center gap-1 text-[10px] sm:text-xs font-semibold rounded-lg min-h-[44px] transition-colors
               ${isActive ? "text-indigo-400" : ""}`}
             style={isActive ? {} : { color: "var(--ax-text-faint)" }}
             aria-current={isActive ? "page" : undefined}>
-            <Icon className={`h-5 w-5 ${isActive ? "text-indigo-400" : ""}`} />
-            <span>{label}</span>
+            <Icon className={`h-[22px] w-[22px] sm:h-6 sm:w-6 ${isActive ? "text-indigo-400" : ""}`} />
+            <span className="truncate max-w-[90%]">{label}</span>
             {isActive && (
               <span className="absolute top-0 left-1/2 -translate-x-1/2 h-[2px] w-8 rounded-b-full bg-indigo-500" />
             )}
@@ -430,11 +431,11 @@ function MobileBottomNav({ onMoreClick }: { onMoreClick: () => void }) {
         );
       })}
       <button onClick={onMoreClick}
-        className="flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors"
+        className="flex flex-1 flex-col items-center justify-center gap-1 text-[10px] sm:text-xs font-semibold transition-colors min-h-[44px]"
         style={{ color: "var(--ax-text-faint)" }}
         aria-label="Open full menu">
-        <Menu className="h-5 w-5" />
-        <span>More</span>
+        <Menu className="h-[22px] w-[22px] sm:h-6 sm:w-6" />
+        <span className="truncate max-w-[90%]">More</span>
       </button>
     </nav>
   );
@@ -508,12 +509,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       .channel(`notifs:${userId}`)
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
-        (payload: any) => {
-          const type = payload.new?.type;
-          if (type !== "message" && type !== "friend_request") {
-            setUnreadNotif((c) => c + 1);
-          }
+        { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
+        () => {
+          getUnreadNotifCount(userId).then(setUnreadNotif);
           if (notifOpen) loadNotifications();
         },
       )
@@ -558,10 +556,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         {/* Left: hamburger + breadcrumbs */}
         <div className="flex items-center gap-3 min-w-0">
           <button onClick={() => setSidebarOpen(true)}
-            className="rounded-lg p-1.5 transition-colors hover:bg-[var(--ax-surface-3)] lg:hidden"
+            className="rounded-lg p-2 transition-colors hover:bg-[var(--ax-surface-3)] lg:hidden min-h-[44px] min-w-[44px] flex items-center justify-center"
             style={{ color: "var(--ax-text-muted)" }}
             aria-label="Open navigation menu">
-            <Menu className="h-5 w-5" />
+            <Menu className="h-6 w-6" />
           </button>
 
           {/* Breadcrumbs */}
@@ -594,10 +592,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         <div className="flex items-center gap-1.5 sm:gap-2">
           {/* Mobile search icon — visible only on small screens */}
           <Link href="/search"
-            className="flex sm:hidden h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-[var(--ax-surface-3)]"
+            className="flex sm:hidden min-h-[44px] min-w-[44px] items-center justify-center rounded-lg transition-colors hover:bg-[var(--ax-surface-3)]"
             style={{ color: "var(--ax-text-muted)" }}
             aria-label="Search">
-            <Search className="h-[18px] w-[18px]" />
+            <Search className="h-5 w-5" />
           </Link>
           <HeaderSearchTrigger />
 
@@ -605,9 +603,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           <button
             suppressHydrationWarning
             onClick={() => { setMsgOpen(true); setNotifOpen(false); }}
-            className="relative flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-[var(--ax-surface-3)]"
+            className="relative flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg transition-colors hover:bg-[var(--ax-surface-3)]"
             style={{ color: "var(--ax-text-muted)" }}>
-            <MessageCircle className="h-[18px] w-[18px]" />
+            <MessageCircle className="h-5 w-5" />
             {unreadMsg > 0 && (
               <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-white"
                 style={{ background: "var(--ax-danger)", boxShadow: "0 0 8px rgba(239,68,68,0.4)" }}>
@@ -622,9 +620,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
               suppressHydrationWarning
               ref={notifBtnRef}
               onClick={() => { setNotifOpen((o) => !o); setMsgOpen(false); }}
-              className="relative flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-[var(--ax-surface-3)]"
+              className="relative flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg transition-colors hover:bg-[var(--ax-surface-3)]"
               style={{ color: "var(--ax-text-muted)" }}>
-              <Bell className="h-[18px] w-[18px]" />
+              <Bell className="h-5 w-5" />
               {unreadNotif > 0 && (
                 <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-white"
                   style={{ background: "var(--ax-danger)", boxShadow: "0 0 8px rgba(239,68,68,0.4)" }}>
@@ -674,6 +672,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
       {/* ── Main Content ── */}
       <ProfileEnsurer />
+
       <MessagingPanel open={msgOpen} onClose={() => setMsgOpen(false)} onUnreadChange={setUnreadMsg} />
       <CommandPalette />
       <ScrollToTop />

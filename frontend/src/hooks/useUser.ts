@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { User } from '@supabase/supabase-js';
+import { User, AuthChangeEvent, Session } from '@supabase/supabase-js';
 
 export function useUser() {
     const [user, setUser] = useState<User | null>(null);
@@ -17,8 +17,24 @@ export function useUser() {
 
         async function getUser() {
             const { data } = await supabase.auth.getUser();
-            if (mounted) {
+            if (mounted && data?.user) {
+                const { data: profile } = await supabase
+                    .from('user_profiles')
+                    .select('is_banned')
+                    .eq('id', data.user.id)
+                    .maybeSingle();
+
+                if (profile?.is_banned) {
+                    await supabase.auth.signOut();
+                    setUser(null);
+                    setIsLoaded(true);
+                    return;
+                }
+
                 setUser(data.user);
+                setIsLoaded(true);
+            } else if (mounted) {
+                setUser(null);
                 setIsLoaded(true);
             }
         }
@@ -26,9 +42,24 @@ export function useUser() {
         getUser();
 
         const { data: authListener } = supabase.auth.onAuthStateChange(
-            (event, session) => {
+            async (event: AuthChangeEvent, session: Session | null) => {
                 if (mounted) {
-                    setUser(session?.user ?? null);
+                    if (session?.user) {
+                        const { data: profile } = await supabase
+                            .from('user_profiles')
+                            .select('is_banned')
+                            .eq('id', session.user.id)
+                            .maybeSingle();
+
+                        if (profile?.is_banned) {
+                            await supabase.auth.signOut();
+                            setUser(null);
+                        } else {
+                            setUser(session.user);
+                        }
+                    } else {
+                        setUser(null);
+                    }
                     setIsLoaded(true);
                 }
             }

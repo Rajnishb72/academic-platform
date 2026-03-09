@@ -228,11 +228,15 @@ export default function ReputationPage() {
                           isSecond ? "h-48 border-slate-700/60 bg-slate-800/50" : "h-44 border-amber-700/30 bg-amber-900/10"}`}
                     >
                       <div className="absolute -top-3 left-1/2 -translate-x-1/2">{RANK_ICON(orderedIndex + 1)}</div>
-                      <div className={`flex items-center justify-center rounded-full text-sm font-black text-white shadow-md mb-1
+                      <div className={`flex items-center justify-center rounded-full text-sm font-black text-white shadow-md mb-1 overflow-hidden
                         ${isFirst ? "h-14 w-14 bg-gradient-to-br from-amber-400 to-orange-500 ring-4 ring-amber-500/20" :
                           isSecond ? "h-11 w-11 bg-gradient-to-br from-slate-400 to-slate-600 ring-2 ring-slate-500/20" :
                             "h-10 w-10 bg-gradient-to-br from-amber-600 to-amber-800 ring-2 ring-amber-700/20"}`}>
-                        {c.author_avatar}
+                        {c.author_avatar && /^https?:\/\//.test(c.author_avatar) ? (
+                          <img src={c.author_avatar} alt={c.author_name} className="h-full w-full object-cover" />
+                        ) : (
+                          c.author_avatar
+                        )}
                       </div>
                       <p className="text-xs font-semibold text-slate-200 leading-tight truncate w-full">{c.author_name}</p>
                       <p className={`text-lg font-black ${isFirst ? "text-amber-400" : "text-slate-300"}`}>
@@ -279,9 +283,13 @@ export default function ReputationPage() {
                         </td>
                         <td className="px-5 py-3">
                           <div className="flex items-center gap-2.5">
-                            <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-[10px] font-bold text-white
+                            <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-[10px] font-bold text-white overflow-hidden
                               ${isMe ? "ring-2 ring-indigo-400 ring-offset-1 ring-offset-slate-900" : ""}`}>
-                              {c.author_avatar}
+                              {c.author_avatar && /^https?:\/\//.test(c.author_avatar) ? (
+                                <img src={c.author_avatar} alt={c.author_name} className="h-full w-full object-cover" />
+                              ) : (
+                                c.author_avatar
+                              )}
                             </div>
                             <div>
                               <p className={`text-xs font-semibold ${isMe ? "text-indigo-400" : "text-slate-200"}`}>

@@ -60,7 +60,8 @@ export async function getUnreadCount(userId: string): Promise<number> {
 }
 
 /**
- * Delete a private message. Only the sender can delete their own messages.
+ * WhatsApp-style delete. Replaces content with a tombstone string.
+ * Only the sender can soft-delete their own messages.
  */
 export async function deleteMessage(
     messageId: number,
@@ -69,9 +70,9 @@ export async function deleteMessage(
     try {
         const { error } = await supabase
             .from("private_messages")
-            .delete()
+            .update({ content: "🚫 This message was deleted" })
             .eq("id", messageId)
-            .eq("sender_id", senderId); // safety: only sender can delete
+            .eq("sender_id", senderId);
         if (error) {
             console.error("[messaging] deleteMessage:", error.message);
             return false;
@@ -79,6 +80,32 @@ export async function deleteMessage(
         return true;
     } catch (e) {
         console.error("[messaging] deleteMessage error:", e);
+        return false;
+    }
+}
+
+/**
+ * Edit a private message.
+ * Only the sender can edit their own messages.
+ */
+export async function editMessage(
+    messageId: number,
+    senderId: string,
+    newContent: string,
+): Promise<boolean> {
+    try {
+        const { error } = await supabase
+            .from("private_messages")
+            .update({ content: newContent })
+            .eq("id", messageId)
+            .eq("sender_id", senderId);
+        if (error) {
+            console.error("[messaging] editMessage:", error.message);
+            return false;
+        }
+        return true;
+    } catch (e) {
+        console.error("[messaging] editMessage error:", e);
         return false;
     }
 }

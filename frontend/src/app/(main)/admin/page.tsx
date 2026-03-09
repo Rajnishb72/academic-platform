@@ -46,12 +46,16 @@ function BarChart({ values, color = "#6366f1", label }: { values: number[]; colo
     return (
         <div>
             <p className="mb-3 text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--ax-text-faint)" }}>{label}</p>
-            <div className="flex h-24 items-end gap-1.5">
+            <div className="relative flex h-32 items-end gap-2 rounded-xl p-3" style={{ background: "var(--ax-surface-3)", border: "1px solid var(--ax-border)" }}>
+                {/* Y-axis grid lines */}
+                {[0.25, 0.5, 0.75, 1].map((pct) => (
+                    <div key={pct} className="absolute left-0 right-0" style={{ bottom: `${pct * 100}%`, height: 1, background: "var(--ax-border)", opacity: 0.3 }} />
+                ))}
                 {values.map((v, i) => (
-                    <div key={i} className="group relative flex flex-1 flex-col items-center gap-1">
-                        <span className="text-[8px] font-bold opacity-0 group-hover:opacity-100 transition-opacity" style={{ color }}>{v}</span>
-                        <div className="w-full rounded-t-md transition-all group-hover:opacity-100" style={{ height: `${Math.max((v / max) * 100, 4)}%`, background: color, opacity: 0.7 }} />
-                        <span className="text-[8px]" style={{ color: "var(--ax-text-faint)" }}>{labels[i]}</span>
+                    <div key={i} className="group relative flex flex-1 flex-col items-center gap-1 z-10">
+                        <span className="text-[9px] font-bold transition-opacity" style={{ color }}>{v > 0 ? v : ""}</span>
+                        <div className="w-full rounded-md transition-all hover:brightness-125" style={{ height: `${Math.max((v / max) * 100, 6)}%`, background: color, minHeight: v > 0 ? 8 : 3, opacity: v > 0 ? 1 : 0.2 }} />
+                        <span className="text-[8px] font-medium" style={{ color: "var(--ax-text-faint)" }}>{labels[i]}</span>
                     </div>
                 ))}
             </div>

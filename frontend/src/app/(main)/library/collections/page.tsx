@@ -23,7 +23,8 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { createClient } from "@/lib/supabase/client";
 import { logUniqueView } from "@/lib/interactions";
-import PdfThumbnail from "@/components/PdfThumbnail";
+import dynamic from "next/dynamic";
+const PdfThumbnail = dynamic(() => import("@/components/PdfThumbnail"), { ssr: false, loading: () => <div className="h-full w-full bg-slate-800 animate-pulse" /> });
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

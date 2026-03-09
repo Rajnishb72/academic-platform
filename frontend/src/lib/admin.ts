@@ -74,6 +74,47 @@ export async function adminUserBlock(userId: string, isBanned: boolean): Promise
 }
 
 export async function adminUserDelete(userId: string): Promise<void> {
+    // Cascade-delete ALL user data across every table before removing profile.
+    // Order matters: delete child rows first, profile last.
+    const cascadeDeletes = [
+        // 1. Forums
+        supabase.from("forum_comments").delete().eq("user_id", userId),
+        supabase.from("forum_posts").delete().eq("user_id", userId),
+        supabase.from("forum_votes").delete().eq("user_id", userId),
+        supabase.from("forum_comment_votes").delete().eq("user_id", userId),
+        supabase.from("forum_saves").delete().eq("user_id", userId),
+
+        // 2. Library
+        supabase.from("notes").delete().eq("user_id", userId),
+        supabase.from("library_interactions").delete().eq("user_id", userId),
+        supabase.from("library_collections").delete().eq("user_id", userId),
+
+        // 3. Planner
+        supabase.from("plan_proofs").delete().eq("user_id", userId),
+        supabase.from("study_plans").delete().eq("user_id", userId),
+
+        // 4. Social & Profile
+        supabase.from("user_follows").delete().or(`follower_id.eq.${userId},following_id.eq.${userId}`),
+        supabase.from("user_friends").delete().or(`requester_id.eq.${userId},recipient_id.eq.${userId}`),
+        supabase.from("profile_likes").delete().or(`liker_id.eq.${userId},liked_id.eq.${userId}`),
+        supabase.from("notifications").delete().or(`user_id.eq.${userId},actor_id.eq.${userId}`),
+        supabase.from("messages").delete().or(`sender_id.eq.${userId},receiver_id.eq.${userId}`),
+
+        // 5. Campus
+        supabase.from("campus_institutions").delete().eq("owner_id", userId),
+        supabase.from("campus_members").delete().eq("user_id", userId),
+        supabase.from("campus_courses").delete().eq("instructor_id", userId),
+        supabase.from("campus_submissions").delete().eq("user_id", userId),
+        supabase.from("campus_announcements").delete().eq("author_id", userId),
+    ];
+
+    // Execute all cascade deletes (continue on individual errors)
+    const results = await Promise.allSettled(cascadeDeletes);
+    results.forEach((r, i) => {
+        if (r.status === "rejected") console.warn(`[admin] cascade delete step ${i} failed:`, r.reason);
+    });
+
+    // Finally delete the user profile itself
     const { error } = await supabase.from("user_profiles").delete().eq("id", userId);
     if (error) throw new Error(error.message);
 }

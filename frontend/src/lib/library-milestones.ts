@@ -2,20 +2,9 @@
 // Shared milestone definitions used by milestones page and profile page.
 
 import {
-    Upload,
-    Download,
-    Star,
-    BookOpen,
-    Award,
-    TrendingUp,
-    Zap,
-    Crown,
-    Bookmark,
-    Eye,
-    Heart,
-    Target,
-    Flame,
-    Sparkles,
+    BookOpen, Bookmark, Download, Eye, Flame, Heart, Sparkles, Star,
+    Target, Upload, Zap, Crown, Award, Globe, Medal, CheckCircle,
+    Layers, Workflow, Infinity, Calendar, Activity, Gem
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -72,46 +61,63 @@ export const XP_SOURCES = [
 
 export const ALL_LIB_MILESTONES: MilestoneDef[] = [
     // ── Upload Milestones ──
-    { id: "up1", label: "First Contribution", description: "Upload your first note", xp: 10, tier: "bronze", category: "Upload", icon: Upload, check: (s) => s.uploadCount >= 1 },
-    { id: "up2", label: "Rising Author", description: "Upload 5 notes", xp: 25, tier: "bronze", category: "Upload", icon: Upload, check: (s) => s.uploadCount >= 5 },
-    { id: "up3", label: "Prolific Writer", description: "Upload 10 notes", xp: 60, tier: "silver", category: "Upload", icon: BookOpen, check: (s) => s.uploadCount >= 10 },
-    { id: "up4", label: "Knowledge Architect", description: "Upload 25 notes", xp: 150, tier: "gold", category: "Upload", icon: Crown, check: (s) => s.uploadCount >= 25 },
-    { id: "up5", label: "Content Titan", description: "Upload 50 notes", xp: 300, tier: "platinum", category: "Upload", icon: Flame, check: (s) => s.uploadCount >= 50 },
-    { id: "up6", label: "Legendary Publisher", description: "Upload 100 notes", xp: 500, tier: "diamond", category: "Upload", icon: Sparkles, check: (s) => s.uploadCount >= 100 },
+    { id: "up1", label: "First Contribution", description: "Upload your first note", xp: 25, tier: "bronze", category: "Upload", icon: Upload, check: (s) => s.uploadCount >= 1 },
+    { id: "up2", label: "Rising Author", description: "Upload 5 notes", xp: 50, tier: "bronze", category: "Upload", icon: Upload, check: (s) => s.uploadCount >= 5 },
+    { id: "up3", label: "Prolific Writer", description: "Upload 10 notes", xp: 120, tier: "silver", category: "Upload", icon: BookOpen, check: (s) => s.uploadCount >= 10 },
+    { id: "up4", label: "Knowledge Architect", description: "Upload 25 notes", xp: 300, tier: "gold", category: "Upload", icon: Crown, check: (s) => s.uploadCount >= 25 },
+    { id: "up5", label: "Content Titan", description: "Upload 50 notes", xp: 600, tier: "platinum", category: "Upload", icon: Flame, check: (s) => s.uploadCount >= 50 },
+    { id: "up6", label: "Legendary Publisher", description: "Upload 100 notes", xp: 1200, tier: "diamond", category: "Upload", icon: Sparkles, check: (s) => s.uploadCount >= 100 },
 
-    // ── Engagement: Views ──
-    { id: "ev1", label: "Getting Noticed", description: "Your notes reach 100 total views", xp: 30, tier: "bronze", category: "Engagement", icon: Eye, check: (s) => s.totalViews >= 100 },
-    { id: "ev2", label: "Crowd Favorite", description: "Your notes reach 500 total views", xp: 70, tier: "silver", category: "Engagement", icon: Eye, check: (s) => s.totalViews >= 500 },
-    { id: "ev3", label: "Viral Knowledge", description: "Your notes reach 1,000 total views", xp: 120, tier: "gold", category: "Engagement", icon: TrendingUp, check: (s) => s.totalViews >= 1000 },
-    { id: "ev4", label: "View Magnet", description: "A single note reaches 200+ views", xp: 80, tier: "silver", category: "Engagement", icon: Zap, check: (s) => s.topNoteViews >= 200 },
-    { id: "ev5", label: "Legendary Reach", description: "Your notes reach 5,000 total views", xp: 250, tier: "platinum", category: "Engagement", icon: Sparkles, check: (s) => s.totalViews >= 5000 },
+    // ── Global View Milestones ──
+    { id: "v1", label: "Getting Noticed", description: "Reach 50 total views", xp: 20, tier: "bronze", category: "Views", icon: Eye, check: (s) => s.totalViews >= 50 },
+    { id: "v2", label: "Gaining Traction", description: "Reach 500 total views", xp: 50, tier: "silver", category: "Views", icon: Eye, check: (s) => s.totalViews >= 500 },
+    { id: "v3", label: "Crowd Favorite", description: "Reach 2,500 total views", xp: 150, tier: "gold", category: "Views", icon: Eye, check: (s) => s.totalViews >= 2500 },
+    { id: "v4", label: "Viral Knowledge", description: "Reach 10,000 total views", xp: 400, tier: "platinum", category: "Views", icon: Flame, check: (s) => s.totalViews >= 10000 },
+    { id: "v5", label: "Global Reach", description: "Reach 50,000 total views", xp: 1000, tier: "diamond", category: "Views", icon: Globe, check: (s) => s.totalViews >= 50000 },
+    { id: "v6", label: "Omnipresent", description: "Reach 250,000 total views", xp: 2500, tier: "diamond", category: "Views", icon: Sparkles, check: (s) => s.totalViews >= 250000 },
 
-    // ── Engagement: Downloads ──
-    { id: "ed1", label: "First Downloads", description: "Your notes get 10 total downloads", xp: 20, tier: "bronze", category: "Downloads", icon: Download, check: (s) => s.totalDownloads >= 10 },
-    { id: "ed2", label: "Popular Notes", description: "Your notes get 50 total downloads", xp: 40, tier: "bronze", category: "Downloads", icon: Download, check: (s) => s.totalDownloads >= 50 },
-    { id: "ed3", label: "Download Star", description: "Your notes get 200 total downloads", xp: 100, tier: "silver", category: "Downloads", icon: TrendingUp, check: (s) => s.totalDownloads >= 200 },
-    { id: "ed4", label: "Download Legend", description: "500 total downloads on your notes", xp: 200, tier: "gold", category: "Downloads", icon: Zap, check: (s) => s.totalDownloads >= 500 },
-    { id: "ed5", label: "Hundred Club", description: "A single note reaches 100 downloads", xp: 80, tier: "silver", category: "Downloads", icon: Award, check: (s) => s.topNoteDownloads >= 100 },
-    { id: "ed6", label: "Download Titan", description: "1,000 total downloads on your notes", xp: 350, tier: "platinum", category: "Downloads", icon: Flame, check: (s) => s.totalDownloads >= 1000 },
+    // ── Global Download Milestones ──
+    { id: "d1", label: "Helpful Hand", description: "Reach 25 total downloads", xp: 30, tier: "bronze", category: "Downloads", icon: Download, check: (s) => s.totalDownloads >= 25 },
+    { id: "d2", label: "Trusted Resource", description: "Reach 100 total downloads", xp: 80, tier: "silver", category: "Downloads", icon: Download, check: (s) => s.totalDownloads >= 100 },
+    { id: "d3", label: "Study Saver", description: "Reach 500 total downloads", xp: 200, tier: "gold", category: "Downloads", icon: Heart, check: (s) => s.totalDownloads >= 500 },
+    { id: "d4", label: "Essential Reading", description: "Reach 2,500 total downloads", xp: 600, tier: "platinum", category: "Downloads", icon: Target, check: (s) => s.totalDownloads >= 2500 },
+    { id: "d5", label: "Life Saver", description: "Reach 10,000 total downloads", xp: 1500, tier: "diamond", category: "Downloads", icon: Zap, check: (s) => s.totalDownloads >= 10000 },
+    { id: "d6", label: "Foundation of Learning", description: "Reach 50,000 total downloads", xp: 3000, tier: "diamond", category: "Downloads", icon: Gem, check: (s) => s.totalDownloads >= 50000 },
 
-    // ── Quality: Ratings ──
-    { id: "q1", label: "First Star", description: "Receive your first 4+ star rating", xp: 30, tier: "bronze", category: "Quality", icon: Star, check: (s) => s.avgRatingAbove4Count >= 1 },
-    { id: "q2", label: "Quality Creator", description: "3 notes with 4+ star ratings", xp: 80, tier: "silver", category: "Quality", icon: Star, check: (s) => s.avgRatingAbove4Count >= 3 },
-    { id: "q3", label: "Excellence Badge", description: "5 notes with 4+ star ratings", xp: 150, tier: "gold", category: "Quality", icon: Award, check: (s) => s.avgRatingAbove4Count >= 5 },
-    { id: "q4", label: "Diamond Standard", description: "10 notes with 4+ star ratings", xp: 300, tier: "platinum", category: "Quality", icon: Crown, check: (s) => s.avgRatingAbove4Count >= 10 },
+    // ── Individual Note Excellence (Big Spikes) ──
+    { id: "in1", label: "Hit Note", description: "A single note hits 100 downloads", xp: 100, tier: "silver", category: "Excellence", icon: Target, check: (s) => s.topNoteDownloads >= 100 },
+    { id: "in2", label: "Blockbuster Note", description: "A single note hits 500 downloads", xp: 300, tier: "gold", category: "Excellence", icon: Flame, check: (s) => s.topNoteDownloads >= 500 },
+    { id: "in3", label: "Legendary Note", description: "A single note hits 2,500 downloads", xp: 1000, tier: "diamond", category: "Excellence", icon: Crown, check: (s) => s.topNoteDownloads >= 2500 },
 
-    // ── Bookmarks ──
-    { id: "b1", label: "Worth Saving", description: "Your notes are bookmarked 5 times", xp: 25, tier: "bronze", category: "Bookmarks", icon: Bookmark, check: (s) => s.totalBookmarks >= 5 },
-    { id: "b2", label: "Highly Saved", description: "Your notes are bookmarked 20 times", xp: 80, tier: "silver", category: "Bookmarks", icon: Bookmark, check: (s) => s.totalBookmarks >= 20 },
-    { id: "b3", label: "Bookmark King", description: "Your notes are bookmarked 50 times", xp: 150, tier: "gold", category: "Bookmarks", icon: Heart, check: (s) => s.totalBookmarks >= 50 },
-    { id: "b4", label: "Fan Favorite", description: "Your notes are bookmarked 100 times", xp: 250, tier: "platinum", category: "Bookmarks", icon: Sparkles, check: (s) => s.totalBookmarks >= 100 },
+    // ── Ratings Milestones ──
+    { id: "r1", label: "Peer Reviewed", description: "Receive 5 total ratings", xp: 30, tier: "bronze", category: "Ratings", icon: Star, check: (s) => s.totalRatings >= 5 },
+    { id: "r2", label: "Highly Rated", description: "Receive 25 total ratings", xp: 100, tier: "silver", category: "Ratings", icon: Star, check: (s) => s.totalRatings >= 25 },
+    { id: "r3", label: "Critically Acclaimed", description: "Receive 100 total ratings", xp: 300, tier: "gold", category: "Ratings", icon: Star, check: (s) => s.totalRatings >= 100 },
+    { id: "r4", label: "Top Rated Author", description: "Receive 500 total ratings", xp: 800, tier: "platinum", category: "Ratings", icon: Award, check: (s) => s.totalRatings >= 500 },
+    { id: "r5", label: "Hall of Fame", description: "Receive 2,000 total ratings", xp: 2000, tier: "diamond", category: "Ratings", icon: Medal, check: (s) => s.totalRatings >= 2000 },
 
-    // ── Consistency ──
-    { id: "c1", label: "Multi-Subject", description: "Upload notes in 3 different subjects", xp: 40, tier: "bronze", category: "Consistency", icon: BookOpen, check: (s) => s.subjectsUploaded.size >= 3 },
-    { id: "c2", label: "Domain Expert", description: "Upload notes in 5 different subjects", xp: 90, tier: "silver", category: "Consistency", icon: Target, check: (s) => s.subjectsUploaded.size >= 5 },
-    { id: "c3", label: "Renaissance Mind", description: "Upload notes in 8 different subjects", xp: 180, tier: "gold", category: "Consistency", icon: BookOpen, check: (s) => s.subjectsUploaded.size >= 8 },
-    { id: "c4", label: "Triple Crown", description: "3 notes with 50+ downloads each", xp: 120, tier: "gold", category: "Consistency", icon: Crown, check: (s) => s.notesAbove50Downloads >= 3 },
-    { id: "c5", label: "View Maestro", description: "5 notes with 100+ views each", xp: 150, tier: "gold", category: "Consistency", icon: Eye, check: (s) => s.notesAbove100Views >= 5 },
+    // ── Quality Consistency ──
+    { id: "qc1", label: "Solid Quality", description: "Have 3 notes with a 4+ rating", xp: 80, tier: "silver", category: "Quality", icon: Award, check: (s) => s.avgRatingAbove4Count >= 3 },
+    { id: "qc2", label: "Consistent Quality", description: "Have 10 notes with a 4+ rating", xp: 250, tier: "gold", category: "Quality", icon: Medal, check: (s) => s.avgRatingAbove4Count >= 10 },
+    { id: "qc3", label: "Master Craftsman", description: "Have 25 notes with a 4+ rating", xp: 600, tier: "platinum", category: "Quality", icon: Gem, check: (s) => s.avgRatingAbove4Count >= 25 },
+    { id: "qc4", label: "Flawless Record", description: "Have 50 notes with a 4+ rating", xp: 1500, tier: "diamond", category: "Quality", icon: CheckCircle, check: (s) => s.avgRatingAbove4Count >= 50 },
+
+    // ── Bookmarks (Usefulness) ──
+    { id: "b1", label: "Worth Keeping", description: "Notes bookmarked 10 times", xp: 40, tier: "bronze", category: "Utility", icon: Bookmark, check: (s) => s.totalBookmarks >= 10 },
+    { id: "b2", label: "Reference Material", description: "Notes bookmarked 50 times", xp: 150, tier: "silver", category: "Utility", icon: Bookmark, check: (s) => s.totalBookmarks >= 50 },
+    { id: "b3", label: "Must-Have", description: "Notes bookmarked 200 times", xp: 400, tier: "gold", category: "Utility", icon: Bookmark, check: (s) => s.totalBookmarks >= 200 },
+    { id: "b4", label: "Indispensable", description: "Notes bookmarked 1,000 times", xp: 1000, tier: "platinum", category: "Utility", icon: Bookmark, check: (s) => s.totalBookmarks >= 1000 },
+
+    // ── Versatility (Subjects) ──
+    { id: "s1", label: "Dual Threat", description: "Upload notes in 2 different subjects", xp: 25, tier: "bronze", category: "Versatility", icon: Layers, check: (s) => s.subjectsUploaded.size >= 2 },
+    { id: "s2", label: "Polymath", description: "Upload notes in 5 different subjects", xp: 80, tier: "silver", category: "Versatility", icon: Workflow, check: (s) => s.subjectsUploaded.size >= 5 },
+    { id: "s3", label: "Renaissance Student", description: "Upload notes in 10 different subjects", xp: 250, tier: "gold", category: "Versatility", icon: Infinity, check: (s) => s.subjectsUploaded.size >= 10 },
+
+    // ── Consistency (Weekly) ──
+    { id: "w1", label: "Making a Habit", description: "Upload notes in 2 consecutive weeks", xp: 30, tier: "bronze", category: "Consistency", icon: Calendar, check: (s) => s.consecutiveWeeks >= 2 },
+    { id: "w2", label: "On a Roll", description: "Upload notes in 4 consecutive weeks", xp: 80, tier: "silver", category: "Consistency", icon: Activity, check: (s) => s.consecutiveWeeks >= 4 },
+    { id: "w3", label: "Unstoppable", description: "Upload notes in 8 consecutive weeks", xp: 200, tier: "gold", category: "Consistency", icon: Zap, check: (s) => s.consecutiveWeeks >= 8 },
+    { id: "w4", label: "Machine", description: "Upload notes in 16 consecutive weeks", xp: 500, tier: "platinum", category: "Consistency", icon: CheckCircle, check: (s) => s.consecutiveWeeks >= 16 },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

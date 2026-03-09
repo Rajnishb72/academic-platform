@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   AlertTriangle,
   FileText,
+  BadgeCheck,
 } from "lucide-react";
 import { useUser } from "@/hooks/useUser";
 import {
@@ -424,6 +425,11 @@ function ManageDashboard({
             <h2 className="truncate text-lg font-bold text-slate-100">
               {inst.name}
             </h2>
+            {inst.is_verified && (
+              <span title="Verified Group">
+                <BadgeCheck className="h-5 w-5 shrink-0 text-emerald-400" />
+              </span>
+            )}
             <span
               className={`shrink-0 flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${ROLE_BADGE.owner}`}
             >
@@ -968,8 +974,9 @@ function RequestRow({
         {member.avatar_initials}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-slate-200">
+        <p className="flex items-center gap-1 truncate text-sm font-medium text-slate-200">
           {member.name}
+          {member.is_verified && <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-blue-400" />}
         </p>
         {showDate && (
           <p className="text-xs text-slate-500">

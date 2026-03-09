@@ -26,6 +26,7 @@ import {
   Upload,
   Download,
   Eye,
+  BadgeCheck,
 } from "lucide-react";
 import Link from "next/link";
 import { useUser } from "@/hooks/useUser";
@@ -351,12 +352,17 @@ function MemberRow({
 
   return (
     <div className="flex items-center gap-3 rounded-xl border border-slate-800/60 bg-slate-900/40 px-4 py-3 transition hover:border-indigo-500/40 hover:bg-slate-800/60">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-800 text-xs font-bold text-slate-300 ring-1 ring-slate-700/50">
-        {member.avatar_initials}
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-800 text-xs font-bold text-slate-300 ring-1 ring-slate-700/50">
+        {member.avatar_url ? (
+          <img src={member.avatar_url} alt="avatar" className="h-full w-full object-cover" />
+        ) : (
+          member.avatar_initials
+        )}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-slate-200">
+        <p className="flex items-center gap-1 truncate text-sm font-medium text-slate-200">
           {member.name}
+          {member.is_verified && <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-blue-400" />}
         </p>
         <p className="text-xs text-slate-500">{timeAgo(member.joined_at)}</p>
       </div>
@@ -432,9 +438,16 @@ function OverviewTab({
             {institution.avatar_initials}
           </div>
           <div>
-            <h2 className="text-lg font-bold text-slate-100">
-              {institution.name}
-            </h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-bold text-slate-100">
+                {institution.name}
+              </h2>
+              {institution.is_verified && (
+                <span title="Verified Group">
+                  <BadgeCheck className="h-5 w-5 shrink-0 text-emerald-400" />
+                </span>
+              )}
+            </div>
             <p className="text-sm text-slate-400">{institution.description}</p>
           </div>
         </div>
@@ -1378,6 +1391,11 @@ function GroupCard({
             <h3 className="truncate text-sm font-bold text-slate-100">
               {group.name}
             </h3>
+            {group.is_verified && (
+              <span title="Verified Group">
+                <BadgeCheck className="h-4 w-4 shrink-0 text-emerald-400" />
+              </span>
+            )}
             {group.is_public ? (
               <Globe className="h-3.5 w-3.5 shrink-0 text-slate-500" />
             ) : (
@@ -1652,9 +1670,16 @@ export default function MyGroupsPage() {
                 {selected.avatar_initials}
               </div>
               <div>
-                <h2 className="text-sm font-bold text-slate-100">
-                  {selected.name}
-                </h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm font-bold text-slate-100">
+                    {selected.name}
+                  </h2>
+                  {selected.is_verified && (
+                    <span title="Verified Group">
+                      <BadgeCheck className="h-4 w-4 shrink-0 text-emerald-400" />
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-slate-500">
                   {selected.member_count} members
                 </p>

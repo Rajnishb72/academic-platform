@@ -22,6 +22,7 @@ export interface Institution {
   userRole?: MemberRole | null;
   memberStatus?: MembershipStatus | null;
   assignment_count?: number;
+  is_verified?: boolean;
 }
 
 export interface Course {
@@ -80,6 +81,8 @@ export interface CampusMember {
   role: MemberRole;
   joined_at: string;
   status: MembershipStatus;
+  avatar_url?: string | null;
+  is_verified?: boolean;
 }
 
 export interface Submission {
@@ -638,24 +641,33 @@ export async function createAnnouncement(payload: {
 export async function fetchMembers(
   institutionId: string,
 ): Promise<CampusMember[]> {
-  const { data, error } = await supabase
+  const { data: members, error } = await supabase
     .from("campus_members")
-    .select("*, user_profiles:user_id(display_name, username)")
+    .select("*")
     .eq("institution_id", institutionId)
     .order("joined_at", { ascending: true });
 
   if (error) throw new Error(error.message);
+  if (!members || members.length === 0) return [];
 
-  // Use latest display_name from user_profiles if available
-  return (data ?? []).map((m) => {
-    const profile = m.user_profiles as { display_name?: string; username?: string } | null;
+  const userIds = members.map(m => m.user_id);
+  const { data: profiles } = await supabase
+    .from("user_profiles")
+    .select("id, display_name, username, avatar_url, is_verified")
+    .in("id", userIds);
+
+  const profileMap = new Map((profiles ?? []).map(p => [p.id, p]));
+
+  return members.map((m) => {
+    const profile = profileMap.get(m.user_id);
     const latestName = profile?.display_name || m.name;
     const initials = latestName.split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
     return {
       ...m,
       name: latestName,
+      avatar_url: profile?.avatar_url || null,
       avatar_initials: initials || m.avatar_initials,
-      user_profiles: undefined, // clean up joined data
+      is_verified: profile?.is_verified ?? false,
     };
   });
 }

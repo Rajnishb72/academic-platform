@@ -123,9 +123,13 @@ export default function SavedPage() {
                   {/* Author */}
                   <div className="mb-3 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2.5">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-indigo-500 to-purple-600 text-xs font-bold text-white shadow-sm">
-                        {post.author_avatar}
-                      </div>
+                      {post.author_avatar && /^https?:\/\//.test(post.author_avatar) ? (
+                        <img src={post.author_avatar} alt={post.author_name} className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-white/10" />
+                      ) : (
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-indigo-500 to-purple-600 text-xs font-bold text-white shadow-sm">
+                          {post.author_avatar}
+                        </div>
+                      )}
                       <div>
                         <p className="text-xs font-semibold text-slate-200">
                           {post.author_name}

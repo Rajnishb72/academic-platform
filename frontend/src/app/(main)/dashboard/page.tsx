@@ -3,12 +3,15 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
+import NextImage from "next/image";
 import { useUser } from "@/hooks/useUser";
 import {
   BookOpen, Bot, Calendar, CheckCircle2, ClipboardList,
   Clock, AlertTriangle, Eye, GraduationCap, Loader2, MessageSquare, School,
   Sparkles, Star, Target, TrendingUp, Upload, Users, ArrowRight,
   Flame, ChevronRight, BarChart2, Zap, LayoutDashboard, Compass, Activity,
+  Sprout, PenLine, Lightbulb, HeartHandshake, Award, Trophy, Gem, Crown, X,
+  Lock,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import {
@@ -16,6 +19,18 @@ import {
   type Institution, type Assignment,
 } from "@/lib/campus";
 import { OnboardingChecklist } from "@/components/OnboardingChecklist";
+import { computeUserXP, XP_TITLES, type XPBreakdown, type TitleLevel } from "@/lib/xp";
+import { fetchProfile } from "@/lib/profile";
+
+// ─── Title Icon Map ───────────────────────────────────────────────────────────
+const TITLE_ICON_MAP: Record<string, React.ElementType> = {
+  Sprout, BookOpen, PenLine, GraduationCap, Lightbulb,
+  HeartHandshake, Award, Trophy, Gem, Crown,
+};
+function TitleIcon({ title, size = 16 }: { title: TitleLevel; size?: number }) {
+  const Icon = TITLE_ICON_MAP[title.icon] ?? Star;
+  return <Icon className={`${title.color}`} style={{ width: size, height: size }} />;
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -155,6 +170,9 @@ export default function DashboardPage() {
   const [mounted, setMounted] = useState(false);
   const [greetText, setGreetText] = useState("");
   const [dateText, setDateText] = useState("");
+  const [xpData, setXpData] = useState<XPBreakdown | null>(null);
+  const [showXPModal, setShowXPModal] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   // Hydration-safe: set client-only values after mount
   useEffect(() => {
@@ -212,30 +230,54 @@ export default function DashboardPage() {
       setHotPosts((hotPostsResult.data ?? []) as HotPost[]);
 
       const userSubjects = [...new Set(uploads.map((n: { subject?: string }) => n.subject).filter(Boolean))];
-      if (userSubjects.length > 0) {
-        const { data: recData } = await supabase
-          .from("notes").select("id,title,subject,avg_rating,views_count")
-          .in("subject", userSubjects).neq("user_id", user.id)
-          .order("avg_rating", { ascending: false }).limit(5);
-        setRecommended((recData ?? []) as RecommendedNote[]);
-      } else {
-        const { data: fallbackData } = await supabase
-          .from("notes").select("id,title,subject,avg_rating,views_count")
-          .order("avg_rating", { ascending: false }).limit(5);
-        setRecommended((fallbackData ?? []) as RecommendedNote[]);
-      }
 
-      let plans: StudyPlan[] = [];
-      let chapters = 0;
-      try {
-        const raw = localStorage.getItem("academix_plans");
-        if (raw) {
-          const parsed = JSON.parse(raw) as { id: string; name: string; targetDate: string; dailyHours: number; plan: { schedule: unknown[] } }[];
-          plans = parsed.map((p) => ({ id: p.id, name: p.name, targetDate: p.targetDate, dailyHours: p.dailyHours ?? 1, totalChapters: p.plan.schedule.length }));
-          chapters = plans.reduce((s, p) => s + p.totalChapters, 0);
+      // Run remaining fetches in parallel for faster loading
+      const recommendedPromise = (async () => {
+        if (userSubjects.length > 0) {
+          const { data: recData } = await supabase
+            .from("notes").select("id,title,subject,avg_rating,views_count")
+            .in("subject", userSubjects).neq("user_id", user.id)
+            .order("avg_rating", { ascending: false }).limit(5);
+          return (recData ?? []) as RecommendedNote[];
+        } else {
+          const { data: fallbackData } = await supabase
+            .from("notes").select("id,title,subject,avg_rating,views_count")
+            .order("avg_rating", { ascending: false }).limit(5);
+          return (fallbackData ?? []) as RecommendedNote[];
         }
-      } catch { /* ignore */ }
+      })();
+
+      const plansPromise = (async () => {
+        try {
+          const { data: dbPlans } = await supabase
+            .from("study_plans")
+            .select("id,name,target_date,daily_hours,plan_data")
+            .eq("user_id", user.id)
+            .order("created_at", { ascending: false });
+          if (dbPlans) {
+            const p = dbPlans.map((p: any) => ({
+              id: p.id, name: p.name, targetDate: p.target_date,
+              dailyHours: p.daily_hours ?? 1,
+              totalChapters: p.plan_data?.schedule?.length ?? 0,
+            }));
+            return { plans: p, chapters: p.reduce((s, x) => s + x.totalChapters, 0) };
+          }
+        } catch { /* ignore */ }
+        return { plans: [] as StudyPlan[], chapters: 0 };
+      })();
+
+      const xpPromise = computeUserXP(user.id).catch(() => null);
+      const profilePromise = fetchProfile(user.id).catch(() => null);
+
+      const [recResult, plansResult, xpResult, profileResult] = await Promise.all([
+        recommendedPromise, plansPromise, xpPromise, profilePromise,
+      ]);
+
+      setRecommended(recResult);
+      const { plans, chapters } = plansResult;
       setStudyPlans(plans.slice(0, 3));
+      if (xpResult) setXpData(xpResult);
+      if (profileResult?.avatar_url) setAvatarUrl(profileResult.avatar_url);
 
       setStats({
         groups: myGroups.length, pendingAssignments: allAssignments.length,
@@ -299,8 +341,13 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between gap-4 px-6 py-5">
           <div className="flex items-center gap-4">
             <div className="relative">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-base font-bold text-white shadow-lg"
-                style={{ boxShadow: "0 4px 14px rgba(99, 102, 241, 0.3)" }}>{initials}</div>
+              {avatarUrl || user?.imageUrl ? (
+                <NextImage src={avatarUrl ?? user?.imageUrl ?? ""} alt={firstName || "User"} width={48} height={48}
+                  className="h-12 w-12 shrink-0 rounded-2xl object-cover shadow-lg ring-2 ring-indigo-500/30" unoptimized />
+              ) : (
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-base font-bold text-white shadow-lg"
+                  style={{ boxShadow: "0 4px 14px rgba(99, 102, 241, 0.3)" }}>{initials}</div>
+              )}
               <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-400 ring-2 ring-[var(--ax-surface-2)]">
                 <span className="h-2 w-2 rounded-full" style={{ background: "var(--ax-surface-2)" }} />
               </span>
@@ -311,6 +358,19 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="flex items-center gap-5">
+            {/* XP + Title Display */}
+            {xpData && (
+              <button onClick={() => setShowXPModal(true)} className="hidden sm:flex items-center gap-2.5 rounded-xl px-3 py-2 transition-colors hover:bg-[var(--ax-surface-3)]" style={{ border: "1px solid var(--ax-border)" }}>
+                <div className={`flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br ${xpData.title.gradient}`}>
+                  <TitleIcon title={xpData.title} size={16} />
+                </div>
+                <div className="text-left">
+                  <p className={`text-xs font-bold ${xpData.title.color}`}>{xpData.title.name}</p>
+                  <p className="text-[10px] font-semibold" style={{ color: "var(--ax-text-faint)" }}>{xpData.totalXP.toLocaleString()} XP</p>
+                </div>
+              </button>
+            )}
+            <div className="hidden h-8 w-px sm:block" style={{ background: "var(--ax-border-light)" }} />
             <div className="hidden items-center gap-3 sm:flex">
               <div className="relative flex items-center justify-center">
                 <Ring pct={engagementScore} size={52} stroke={4} color="#6366f1" />
@@ -334,6 +394,120 @@ export default function DashboardPage() {
           </div>
         </div>
       </motion.div>
+
+      {/* ── XP Breakdown Modal ────────────────────────────────────────── */}
+      <AnimatePresence>
+        {showXPModal && xpData && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowXPModal(false)}>
+            <motion.div initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              className="w-full max-w-md overflow-hidden rounded-2xl shadow-2xl"
+              style={{ background: "var(--ax-surface-1)", border: "1px solid var(--ax-border)" }}
+              onClick={(e) => e.stopPropagation()}>
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: "1px solid var(--ax-border)" }}>
+                <div className="flex items-center gap-3">
+                  <div className={`flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${xpData.title.gradient} shadow-lg`}>
+                    <TitleIcon title={xpData.title} size={20} />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-bold text-white">{xpData.title.name}</h2>
+                    <p className="text-xs" style={{ color: "var(--ax-text-faint)" }}>{xpData.title.tagline}</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowXPModal(false)} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-800 hover:text-white transition">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Total XP + Progress */}
+              <div className="px-6 py-4" style={{ borderBottom: "1px solid var(--ax-border)" }}>
+                <div className="flex items-baseline justify-between mb-2">
+                  <span className="text-2xl font-black text-white">{xpData.totalXP.toLocaleString()} <span className="text-sm font-bold text-slate-400">XP</span></span>
+                  {xpData.nextTitle && (
+                    <span className="text-xs font-semibold" style={{ color: "var(--ax-text-faint)" }}>
+                      {xpData.xpToNext.toLocaleString()} to {xpData.nextTitle.name}
+                    </span>
+                  )}
+                </div>
+                <div className="h-2 rounded-full overflow-hidden" style={{ background: "var(--ax-surface-3)" }}>
+                  <motion.div initial={{ width: 0 }} animate={{ width: `${xpData.progressPct}%` }} transition={{ duration: 0.8 }}
+                    className={`h-full rounded-full bg-gradient-to-r ${xpData.title.gradient}`} />
+                </div>
+              </div>
+
+              {/* XP by Source */}
+              <div className="px-6 py-4 grid grid-cols-3 gap-3" style={{ borderBottom: "1px solid var(--ax-border)" }}>
+                <div className="rounded-xl p-3 bg-indigo-500/10 border border-indigo-500/20">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <MessageSquare className="h-3.5 w-3.5 text-indigo-400" />
+                    <span className="text-[10px] font-bold uppercase text-indigo-400">Forum</span>
+                  </div>
+                  <p className="text-lg font-bold text-white">{xpData.forum.total}</p>
+                  <div className="mt-1 space-y-0.5 text-[10px]" style={{ color: "var(--ax-text-faint)" }}>
+                    <p>{xpData.forum.posts} posts · {xpData.forum.comments} comments</p>
+                    <p>{xpData.forum.upvotesReceived} upvotes received</p>
+                  </div>
+                </div>
+                <div className="rounded-xl p-3 bg-amber-500/10 border border-amber-500/20">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <BookOpen className="h-3.5 w-3.5 text-amber-400" />
+                    <span className="text-[10px] font-bold uppercase text-amber-400">Library</span>
+                  </div>
+                  <p className="text-lg font-bold text-white">{xpData.library.total}</p>
+                  <div className="mt-1 space-y-0.5 text-[10px]" style={{ color: "var(--ax-text-faint)" }}>
+                    <p>{xpData.library.uploads} uploads</p>
+                    <p>{xpData.library.downloadsReceived} downloads</p>
+                  </div>
+                </div>
+                <div className="rounded-xl p-3 bg-violet-500/10 border border-violet-500/20">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <Calendar className="h-3.5 w-3.5 text-violet-400" />
+                    <span className="text-[10px] font-bold uppercase text-violet-400">Planner</span>
+                  </div>
+                  <p className="text-lg font-bold text-white">{xpData.planner.total}</p>
+                  <div className="mt-1 space-y-0.5 text-[10px]" style={{ color: "var(--ax-text-faint)" }}>
+                    <p>{xpData.planner.plans} plans</p>
+                    <p>{xpData.planner.proofs} proofs submitted</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* All Title Levels */}
+              <div className="px-6 py-4 max-h-[260px] overflow-y-auto" style={{ scrollbarWidth: "none" }}>
+                <p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: "var(--ax-text-faint)" }}>All Title Levels</p>
+                <div className="space-y-2">
+                  {XP_TITLES.map((t) => {
+                    const earned = xpData.totalXP >= t.threshold;
+                    const isCurrent = t.rank === xpData.title.rank;
+                    return (
+                      <div key={t.rank}
+                        className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all ${isCurrent ? "ring-1 ring-white/20 bg-white/5" : earned ? "opacity-80" : "opacity-40"
+                          }`}>
+                        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${earned ? `bg-gradient-to-br ${t.gradient}` : "bg-slate-800"
+                          }`}>
+                          <TitleIcon title={t} size={14} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs font-bold ${earned ? t.color : "text-slate-500"}`}>{t.name}</span>
+                            {isCurrent && <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[8px] font-bold text-emerald-400">CURRENT</span>}
+                            {earned && !isCurrent && <CheckCircle2 className="h-3 w-3 text-emerald-500" />}
+                            {!earned && <Lock className="h-3 w-3 text-slate-600" />}
+                          </div>
+                          <p className="text-[10px] text-slate-500 truncate">{t.tagline}</p>
+                        </div>
+                        <span className={`text-[10px] font-semibold ${earned ? t.color : "text-slate-600"}`}>{t.threshold.toLocaleString()} XP</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Onboarding Checklist ────────────────────────────────────────── */}
       <OnboardingChecklist stats={{

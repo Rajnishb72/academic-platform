@@ -6,7 +6,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Search, X, Download, Compass, Star, FileText, Loader2, Eye, Bookmark } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { logUniqueView, logUniqueDownload, rateNote, getUserBookmarks, toggleBookmarkServer } from "@/lib/interactions";
-import PdfThumbnail from "@/components/PdfThumbnail";
+import dynamic from "next/dynamic";
+const PdfThumbnail = dynamic(() => import("@/components/PdfThumbnail"), { ssr: false, loading: () => <div className="h-full w-full bg-slate-800 animate-pulse" /> });
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -14,6 +15,7 @@ interface Note {
     id: string;
     user_id: string;
     uploader_name: string | null;
+    uploader_avatar?: string | null;
     title: string;
     subject: string;
     file_url: string;
@@ -115,7 +117,8 @@ function StarRow({ value, onRate, disabled, size = 14 }: { value: number; onRate
 
 function DetailModal({ note, userId, onClose, rate, userRating, busy, isBookmarked, toggleBookmark, onDownload }: any) {
     const color = SUBJECT_COLOR[note.subject];
-    const avatar = note.user_id?.slice(-2, -1).toUpperCase() || "U";
+    const nameStr = note.uploader_name || "Unknown User";
+    const initials = nameStr.split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
     return (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md" onClick={onClose}>
             <motion.div initial={{ scale: 0.92, y: 30 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.92, y: 30 }} onClick={(e) => e.stopPropagation()} className="flex h-[88vh] w-full max-w-[1100px] overflow-hidden rounded-3xl shadow-2xl border border-slate-800 bg-slate-900">
@@ -129,7 +132,11 @@ function DetailModal({ note, userId, onClose, rate, userRating, busy, isBookmark
                     </div>
                     <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
                         <div className="flex items-center gap-3">
-                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500/10 text-sm font-bold text-blue-400 ring-1 ring-blue-500/20">{avatar}</div>
+                            {note.uploader_avatar ? (
+                                <img src={note.uploader_avatar} alt={nameStr} className="h-11 w-11 rounded-2xl object-cover ring-1 ring-white/10" />
+                            ) : (
+                                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500/10 text-sm font-bold text-blue-400 ring-1 ring-blue-500/20">{initials}</div>
+                            )}
                             <div>
                                 <a href={`/search?q=${encodeURIComponent(note.uploader_name ?? note.user_id ?? "")}`} className="text-[13px] font-semibold text-blue-400 hover:underline">{note.uploader_name ?? note.user_id?.slice(0, 16)}</a>
                                 <p className="text-[10px] text-slate-500">Tap to view profile</p>
@@ -238,8 +245,27 @@ export default function BookmarksPage() {
                 .in("id", ids)
                 .order("created_at", { ascending: false });
 
-            if (error) console.error("[Bookmarks]", error.message);
-            else setNotes((data as Note[]) ?? []);
+            if (error) {
+                console.error("[Bookmarks]", error.message);
+            } else {
+                const rawNotes = (data as Note[]) ?? [];
+                if (rawNotes.length > 0) {
+                    const uids = Array.from(new Set(rawNotes.map((n) => n.user_id)));
+                    const { data: profs } = await supabase.from("user_profiles").select("id, display_name, avatar_url").in("id", uids);
+                    const pMap = new Map((profs || []).map((p) => [p.id, p]));
+                    const enriched = rawNotes.map((n) => {
+                        const p = pMap.get(n.user_id);
+                        return {
+                            ...n,
+                            uploader_name: p?.display_name || n.uploader_name,
+                            uploader_avatar: p?.avatar_url,
+                        };
+                    });
+                    setNotes(enriched);
+                } else {
+                    setNotes([]);
+                }
+            }
         } finally {
             setLoading(false);
         }
@@ -354,7 +380,8 @@ export default function BookmarksPage() {
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {notes.map((note, i) => {
                         const color = SUBJECT_COLOR[note.subject];
-                        const avatar = note.user_id?.slice(-2, -1).toUpperCase() || "U";
+                        const nameStr = note.uploader_name || "Unknown User";
+                        const initials = nameStr.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
                         const dl = note.downloads_count ?? 0;
                         const avgR = note.avg_rating ?? 0;
                         return (
@@ -392,7 +419,11 @@ export default function BookmarksPage() {
                                         </div>
                                     )}
                                     <div className="mt-auto pt-3 flex items-center gap-2 border-t border-slate-800/50">
-                                        <div className="flex h-5 w-5 items-center justify-center rounded-md bg-amber-500/10 text-[9px] font-bold text-amber-400">{avatar}</div>
+                                        {note.uploader_avatar ? (
+                                            <img src={note.uploader_avatar} alt={nameStr} className="h-5 w-5 rounded-md object-cover" />
+                                        ) : (
+                                            <div className="flex h-5 w-5 items-center justify-center rounded-md bg-amber-500/10 text-[9px] font-bold text-amber-400">{initials}</div>
+                                        )}
                                         <span className="flex-1 truncate text-[10px] text-slate-400">{note.uploader_name ?? note.user_id?.slice(0, 12)}</span>
                                         <div className="flex items-center gap-2 text-[10px] text-slate-500">
                                             <span className="flex items-center gap-0.5"><Eye className="h-2.5 w-2.5" />{note.views_count ?? 0}</span>

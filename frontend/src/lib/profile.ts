@@ -7,6 +7,7 @@ export interface UserProfile {
   updated_at: string;
   bio?: string;
   institution?: string;
+  is_verified?: boolean;
 }
 
 // ─── Ensure row exists (called on every login) ──────────────────────────────

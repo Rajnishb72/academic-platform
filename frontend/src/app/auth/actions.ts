@@ -32,6 +32,20 @@ export async function login(formData: FormData) {
             redirect('/sign-in?message=' + encodeURIComponent(message))
         }
 
+        // Block banned users
+        if (data?.user) {
+            const { data: profile } = await supabase
+                .from('user_profiles')
+                .select('is_banned')
+                .eq('id', data.user.id)
+                .maybeSingle();
+
+            if (profile?.is_banned) {
+                await supabase.auth.signOut();
+                redirect('/sign-in?message=' + encodeURIComponent('Your account has been blocked due to policy violations. Please contact support.'));
+            }
+        }
+
         revalidatePath('/', 'layout')
         redirect('/dashboard')
     } catch (e) {
