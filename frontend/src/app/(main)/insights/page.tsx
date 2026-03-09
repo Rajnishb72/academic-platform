@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { useDataCache } from "@/hooks/useDataCache";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { useUser } from "@/hooks/useUser";
@@ -201,58 +202,48 @@ function BadgeCard({ label, description, icon: Icon, earned, color }: { label: s
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+async function fetchInsightsData(userId: string): Promise<InsightData> {
+  const [forumResult, libraryResult, myGroups] = await Promise.all([
+    supabase.from("forum_posts").select("id,title,created_at,upvotes_count,comments_count,category")
+      .eq("user_id", userId).order("created_at", { ascending: false }),
+    fetch("/api/library/my-notes").then((r) => r.json()).catch(() => []),
+    fetchMyInstitutions(userId),
+  ]);
+  const posts = (forumResult.data ?? []) as ForumPost[];
+  const notes = (Array.isArray(libraryResult) ? libraryResult : []) as LibraryNote[];
+  let pending = 0, submitted = 0;
+  await Promise.all(myGroups.map(async (g) => {
+    try {
+      const a = await fetchAssignments(g.id, userId, g.userRole);
+      if (g.userRole !== "admin" && g.userRole !== "owner") {
+        pending += a.filter((x) => x.status === "upcoming" || x.status === "overdue").length;
+      }
+      submitted += a.filter((x) => x.status === "submitted" || x.status === "graded").length;
+    } catch { /* ignore */ }
+  }));
+  let plans: SavedPlan[] = [];
+  try {
+    const { data: dbPlans } = await supabase.from("study_plans")
+      .select("id,name,created_at,target_date,daily_hours,plan_data")
+      .eq("user_id", userId).order("created_at", { ascending: false });
+    if (dbPlans) {
+      plans = dbPlans.map((p: any) => ({
+        id: p.id, name: p.name, createdAt: p.created_at,
+        targetDate: p.target_date, dailyHours: p.daily_hours ?? 1,
+        plan: p.plan_data ?? { feasible: true, schedule: [], overallStrategy: "" }
+      }));
+    }
+  } catch { /* ignore */ }
+  return { forumPosts: posts, libraryNotes: notes, plans, groupCount: myGroups.length, pendingCount: pending, submittedCount: submitted };
+}
+
 export default function InsightsPage() {
   const { user } = useUser();
-  const [data, setData] = useState<InsightData | null>(null);
-  const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
-    if (!user?.id) return;
-    setLoading(true);
-    try {
-      const [forumResult, libraryResult, myGroups] = await Promise.all([
-        supabase.from("forum_posts").select("id,title,created_at,upvotes_count,comments_count,category")
-          .eq("user_id", user.id).order("created_at", { ascending: false }),
-        fetch("/api/library/my-notes").then((r) => r.json()).catch(() => []),
-        fetchMyInstitutions(user.id),
-      ]);
-
-      const posts = (forumResult.data ?? []) as ForumPost[];
-      const notes = (Array.isArray(libraryResult) ? libraryResult : []) as LibraryNote[];
-
-      let pending = 0, submitted = 0;
-      await Promise.all(myGroups.map(async (g) => {
-        try {
-          const a = await fetchAssignments(g.id, user.id, g.userRole);
-          if (g.userRole !== "admin" && g.userRole !== "owner") {
-            pending += a.filter((x) => x.status === "upcoming" || x.status === "overdue").length;
-          }
-          submitted += a.filter((x) => x.status === "submitted" || x.status === "graded").length;
-        } catch { /* ignore */ }
-      }));
-
-      let plans: SavedPlan[] = [];
-      try {
-        const { data: dbPlans } = await supabase
-          .from("study_plans")
-          .select("id,name,created_at,target_date,daily_hours,plan_data")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false });
-        if (dbPlans) {
-          plans = dbPlans.map((p: any) => ({
-            id: p.id, name: p.name, createdAt: p.created_at,
-            targetDate: p.target_date, dailyHours: p.daily_hours ?? 1,
-            plan: p.plan_data ?? { feasible: true, schedule: [], overallStrategy: "" },
-          }));
-        }
-      } catch { /* ignore */ }
-
-      setData({ forumPosts: posts, libraryNotes: notes, plans, groupCount: myGroups.length, pendingCount: pending, submittedCount: submitted });
-    } catch (e) { console.error("Insights load:", e); }
-    finally { setLoading(false); }
-  }, [user?.id]);
-
-  useEffect(() => { load(); }, [load]);
+  const cacheKey = user?.id ? `insights-${user.id}` : null;
+  const { data, loading } = useDataCache<InsightData>(
+    cacheKey, () => fetchInsightsData(user!.id), [user?.id]
+  );
 
   // Derived
   const allEvents = useMemo(() => !data ? [] : [

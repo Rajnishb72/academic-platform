@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useDataCache } from "@/hooks/useDataCache";
 import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
@@ -24,16 +25,11 @@ function TitleIcon({ title, size = 16 }: { title: TitleLevel; size?: number }) {
 }
 
 export default function LeaderboardPage() {
-    const [users, setUsers] = useState<LeaderboardEntry[]>([]);
-    const [loading, setLoading] = useState(true);
+    const { data: users, loading } = useDataCache<LeaderboardEntry[]>(
+        'leaderboard', () => computeAllUsersXP()
+    );
+    const entries = users ?? [];
     const [expandedUser, setExpandedUser] = useState<string | null>(null);
-
-    useEffect(() => {
-        computeAllUsersXP().then((entries) => {
-            setUsers(entries);
-            setLoading(false);
-        });
-    }, []);
 
     return (
         <div className="mx-auto max-w-5xl px-4 sm:px-6 py-10">
@@ -68,7 +64,7 @@ export default function LeaderboardPage() {
                 <div className="space-y-12">
                     {/* Top 3 Podium */}
                     <div className="flex items-end justify-center gap-4 sm:gap-8 px-4 mt-8">
-                        {[users[1], users[0], users[2]].map((u, i) => {
+                        {[entries[1], entries[0], entries[2]].map((u, i) => {
                             if (!u) return null;
                             const isFirst = i === 1;
                             const isSecond = i === 0;
@@ -131,7 +127,7 @@ export default function LeaderboardPage() {
                             <div className="text-right">XP</div>
                         </div>
                         <div className="divide-y divide-slate-800/60">
-                            {users.slice(3).map((u, i) => (
+                            {entries.slice(3).map((u, i) => (
                                 <div key={u.id}>
                                     <motion.div
                                         initial={{ opacity: 0, x: -10 }}
@@ -204,7 +200,7 @@ export default function LeaderboardPage() {
                         </div>
                     </div>
 
-                    {users.length === 0 && (
+                    {entries.length === 0 && (
                         <div className="text-center py-16">
                             <Trophy className="h-12 w-12 text-slate-600 mx-auto mb-4" />
                             <p className="text-slate-400">No users yet. Be the first to contribute!</p>

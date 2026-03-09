@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useDataCache } from "@/hooks/useDataCache";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import NextImage from "next/image";
@@ -154,25 +155,141 @@ const DASH_TABS: { key: DashTab; label: string; icon: React.ElementType }[] = [
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+// ─── Cached data shape ────────────────────────────────────────────────────────
+interface DashCacheData {
+  stats: DashStats; groups: Institution[]; upcoming: UpcomingAssignment[];
+  recentPosts: RecentPost[]; studyPlans: StudyPlan[];
+  libraryNotes: { id: string; title: string; views_count?: number }[];
+  trendingNotes: TrendingNote[]; hotPosts: HotPost[];
+  recommended: RecommendedNote[]; xpData: XPBreakdown | null; avatarUrl: string | null;
+}
+
+async function fetchDashData(userId: string): Promise<DashCacheData> {
+  const [myGroups, forumResult, libraryResult, trendingResult, hotPostsResult] = await Promise.all([
+    fetchMyInstitutions(userId),
+    supabase.from("forum_posts").select("id,title,created_at,upvotes_count,comments_count")
+      .eq("user_id", userId).order("created_at", { ascending: false }).limit(5),
+    fetch("/api/library/my-notes").then((r) => r.json()).catch(() => []),
+    supabase.from("notes").select("id,title,subject,views_count,avg_rating,created_at")
+      .order("views_count", { ascending: false }).limit(5),
+    supabase.from("forum_posts").select("id,title,upvotes_count,comments_count,created_at,author_name")
+      .order("upvotes_count", { ascending: false }).limit(5),
+  ]);
+
+  const allAssignments: UpcomingAssignment[] = [];
+  let submitted = 0;
+  await Promise.all(myGroups.map(async (g) => {
+    try {
+      const asgns = await fetchAssignments(g.id, userId, g.userRole);
+      if (g.userRole !== "admin" && g.userRole !== "owner") {
+        asgns.filter((a) => a.status === "upcoming" || a.status === "overdue").forEach((a) =>
+          allAssignments.push({ ...a, groupName: g.name, groupColor: g.avatar_color })
+        );
+      }
+      submitted += asgns.filter((a) => a.status === "submitted" || a.status === "graded").length;
+    } catch { /* ignore */ }
+  }));
+  allAssignments.sort((a, b) => {
+    if (a.status === "overdue" && b.status !== "overdue") return -1;
+    if (b.status === "overdue" && a.status !== "overdue") return 1;
+    return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+  });
+
+  const posts = (forumResult.data ?? []) as RecentPost[];
+  const totalUpvotes = posts.reduce((s, p) => s + (p.upvotes_count ?? 0), 0);
+  const uploads = Array.isArray(libraryResult) ? libraryResult : [];
+  const totalViews = uploads.reduce((s: number, n: { views_count?: number }) => s + (n.views_count ?? 0), 0);
+  const userSubjects = [...new Set(uploads.map((n: { subject?: string }) => n.subject).filter(Boolean))];
+
+  const [recResult, plansResult, profileResult] = await Promise.all([
+    (async () => {
+      const { data } = userSubjects.length > 0
+        ? await supabase.from("notes").select("id,title,subject,avg_rating,views_count")
+          .in("subject", userSubjects).neq("user_id", userId).order("avg_rating", { ascending: false }).limit(5)
+        : await supabase.from("notes").select("id,title,subject,avg_rating,views_count")
+          .order("avg_rating", { ascending: false }).limit(5);
+      return (data ?? []) as RecommendedNote[];
+    })(),
+    (async () => {
+      try {
+        const { data: dbPlans } = await supabase.from("study_plans")
+          .select("id,name,target_date,daily_hours,plan_data").eq("user_id", userId)
+          .order("created_at", { ascending: false });
+        if (dbPlans) {
+          const p = dbPlans.map((p: any) => ({
+            id: p.id, name: p.name, targetDate: p.target_date,
+            dailyHours: p.daily_hours ?? 1, totalChapters: p.plan_data?.schedule?.length ?? 0
+          }));
+          return { plans: p, chapters: p.reduce((s: number, x: StudyPlan) => s + x.totalChapters, 0) };
+        }
+      } catch { /* ignore */ }
+      return { plans: [] as StudyPlan[], chapters: 0 };
+    })(),
+    fetchProfile(userId).catch(() => null),
+  ]);
+
+  const { plans, chapters } = plansResult;
+  let xpData: XPBreakdown | null = null;
+  if (profileResult?.total_xp != null) {
+    const cachedXP = profileResult.total_xp ?? 0;
+    xpData = {
+      forum: { posts: 0, comments: 0, upvotesReceived: 0, total: profileResult.forum_xp ?? 0 },
+      library: { uploads: 0, downloadsReceived: 0, ratingsReceived: 0, total: profileResult.library_xp ?? 0 },
+      planner: { plans: 0, proofs: 0, total: profileResult.planner_xp ?? 0 },
+      totalXP: cachedXP, title: getTitle(cachedXP), nextTitle: getNextTitle(cachedXP),
+      xpToNext: getXPToNextTitle(cachedXP), progressPct: getTitleProgress(cachedXP),
+    };
+  }
+
+  return {
+    stats: {
+      groups: myGroups.length, pendingAssignments: allAssignments.length,
+      forumPosts: posts.length, libraryUploads: uploads.length,
+      studyPlans: plans.length, submittedCount: submitted, totalUpvotes, totalViews, chapters
+    },
+    groups: myGroups, upcoming: allAssignments.slice(0, 6), recentPosts: posts,
+    studyPlans: plans.slice(0, 3), libraryNotes: uploads.slice(0, 3),
+    trendingNotes: (trendingResult.data ?? []) as TrendingNote[],
+    hotPosts: (hotPostsResult.data ?? []) as HotPost[],
+    recommended: recResult, xpData, avatarUrl: profileResult?.avatar_url ?? null,
+  };
+}
+
 export default function DashboardPage() {
   const { user } = useUser();
-  const [stats, setStats] = useState<DashStats | null>(null);
-  const [groups, setGroups] = useState<Institution[]>([]);
-  const [upcoming, setUpcoming] = useState<UpcomingAssignment[]>([]);
-  const [recentPosts, setRecentPosts] = useState<RecentPost[]>([]);
-  const [studyPlans, setStudyPlans] = useState<StudyPlan[]>([]);
-  const [libraryNotes, setLibraryNotes] = useState<{ id: string; title: string; views_count?: number }[]>([]);
-  const [trendingNotes, setTrendingNotes] = useState<TrendingNote[]>([]);
-  const [hotPosts, setHotPosts] = useState<HotPost[]>([]);
-  const [recommended, setRecommended] = useState<RecommendedNote[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  // ── SWR cache: instant render on revisits ──────────────────────────────────
+  const cacheKey = user?.id ? `dash-${user.id}` : null;
+  const { data: cached, loading, refresh } = useDataCache<DashCacheData>(
+    cacheKey, () => fetchDashData(user!.id), [user?.id]
+  );
+
+  const stats = cached?.stats ?? null;
+  const groups = cached?.groups ?? [];
+  const upcoming = cached?.upcoming ?? [];
+  const recentPosts = cached?.recentPosts ?? [];
+  const studyPlans = cached?.studyPlans ?? [];
+  const libraryNotes = cached?.libraryNotes ?? [];
+  const trendingNotes = cached?.trendingNotes ?? [];
+  const hotPosts = cached?.hotPosts ?? [];
+  const recommended = cached?.recommended ?? [];
+  const avatarUrl = cached?.avatarUrl ?? null;
+  const [xpData, setXpData] = useState<XPBreakdown | null>(null);
   const [tab, setTab] = useState<DashTab>("overview");
   const [mounted, setMounted] = useState(false);
   const [greetText, setGreetText] = useState("");
   const [dateText, setDateText] = useState("");
-  const [xpData, setXpData] = useState<XPBreakdown | null>(null);
   const [showXPModal, setShowXPModal] = useState(false);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+
+  // Sync XP from cache + background recompute
+  const xpRefDone = useRef(false);
+  useEffect(() => {
+    if (cached?.xpData) setXpData(cached.xpData);
+    if (user?.id && !xpRefDone.current) {
+      xpRefDone.current = true;
+      computeUserXP(user.id).then((xp) => { if (xp) setXpData(xp); }).catch(() => { });
+    }
+  }, [cached?.xpData, user?.id]);
 
   // Hydration-safe: set client-only values after mount
   useEffect(() => {
@@ -180,132 +297,6 @@ export default function DashboardPage() {
     setGreetText(greeting());
     setDateText(new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }));
   }, []);
-
-  const load = useCallback(async () => {
-    if (!user?.id) return;
-    setLoading(true);
-    try {
-      const [myGroups, forumResult, libraryResult, trendingResult, hotPostsResult] = await Promise.all([
-        fetchMyInstitutions(user.id),
-        supabase.from("forum_posts").select("id,title,created_at,upvotes_count,comments_count")
-          .eq("user_id", user.id).order("created_at", { ascending: false }).limit(5),
-        fetch("/api/library/my-notes").then((r) => r.json()).catch(() => []),
-        supabase.from("notes").select("id,title,subject,views_count,avg_rating,created_at")
-          .order("views_count", { ascending: false }).limit(5),
-        supabase.from("forum_posts").select("id,title,upvotes_count,comments_count,created_at,author_name")
-          .order("upvotes_count", { ascending: false }).limit(5),
-      ]);
-
-      setGroups(myGroups);
-
-      const allAssignments: UpcomingAssignment[] = [];
-      let submitted = 0;
-      await Promise.all(myGroups.map(async (g) => {
-        try {
-          const asgns = await fetchAssignments(g.id, user.id, g.userRole);
-          if (g.userRole !== "admin" && g.userRole !== "owner") {
-            asgns.filter((a) => a.status === "upcoming" || a.status === "overdue").forEach((a) =>
-              allAssignments.push({ ...a, groupName: g.name, groupColor: g.avatar_color })
-            );
-          }
-          submitted += asgns.filter((a) => a.status === "submitted" || a.status === "graded").length;
-        } catch { /* ignore */ }
-      }));
-      allAssignments.sort((a, b) => {
-        if (a.status === "overdue" && b.status !== "overdue") return -1;
-        if (b.status === "overdue" && a.status !== "overdue") return 1;
-        return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
-      });
-      setUpcoming(allAssignments.slice(0, 6));
-
-      const posts = (forumResult.data ?? []) as RecentPost[];
-      setRecentPosts(posts);
-      const totalUpvotes = posts.reduce((s, p) => s + (p.upvotes_count ?? 0), 0);
-
-      const uploads = Array.isArray(libraryResult) ? libraryResult : [];
-      setLibraryNotes(uploads.slice(0, 3));
-      const totalViews = uploads.reduce((s: number, n: { views_count?: number }) => s + (n.views_count ?? 0), 0);
-
-      setTrendingNotes((trendingResult.data ?? []) as TrendingNote[]);
-      setHotPosts((hotPostsResult.data ?? []) as HotPost[]);
-
-      const userSubjects = [...new Set(uploads.map((n: { subject?: string }) => n.subject).filter(Boolean))];
-
-      // Run remaining fetches in parallel for faster loading
-      const recommendedPromise = (async () => {
-        if (userSubjects.length > 0) {
-          const { data: recData } = await supabase
-            .from("notes").select("id,title,subject,avg_rating,views_count")
-            .in("subject", userSubjects).neq("user_id", user.id)
-            .order("avg_rating", { ascending: false }).limit(5);
-          return (recData ?? []) as RecommendedNote[];
-        } else {
-          const { data: fallbackData } = await supabase
-            .from("notes").select("id,title,subject,avg_rating,views_count")
-            .order("avg_rating", { ascending: false }).limit(5);
-          return (fallbackData ?? []) as RecommendedNote[];
-        }
-      })();
-
-      const plansPromise = (async () => {
-        try {
-          const { data: dbPlans } = await supabase
-            .from("study_plans")
-            .select("id,name,target_date,daily_hours,plan_data")
-            .eq("user_id", user.id)
-            .order("created_at", { ascending: false });
-          if (dbPlans) {
-            const p = dbPlans.map((p: any) => ({
-              id: p.id, name: p.name, targetDate: p.target_date,
-              dailyHours: p.daily_hours ?? 1,
-              totalChapters: p.plan_data?.schedule?.length ?? 0,
-            }));
-            return { plans: p, chapters: p.reduce((s: number, x: StudyPlan) => s + x.totalChapters, 0) };
-          }
-        } catch { /* ignore */ }
-        return { plans: [] as StudyPlan[], chapters: 0 };
-      })();
-
-      const profilePromise = fetchProfile(user.id).catch(() => null);
-
-      const [recResult, plansResult, profileResult] = await Promise.all([
-        recommendedPromise, plansPromise, profilePromise,
-      ]);
-
-      setRecommended(recResult);
-      const { plans, chapters } = plansResult;
-      setStudyPlans(plans.slice(0, 3));
-      if (profileResult?.avatar_url) setAvatarUrl(profileResult.avatar_url);
-
-      // Use cached XP from profile for instant render
-      if (profileResult?.total_xp != null) {
-        const cachedXP = profileResult.total_xp ?? 0;
-        setXpData({
-          forum: { posts: 0, comments: 0, upvotesReceived: 0, total: profileResult.forum_xp ?? 0 },
-          library: { uploads: 0, downloadsReceived: 0, ratingsReceived: 0, total: profileResult.library_xp ?? 0 },
-          planner: { plans: 0, proofs: 0, total: profileResult.planner_xp ?? 0 },
-          totalXP: cachedXP,
-          title: getTitle(cachedXP),
-          nextTitle: getNextTitle(cachedXP),
-          xpToNext: getXPToNextTitle(cachedXP),
-          progressPct: getTitleProgress(cachedXP),
-        });
-      }
-
-      // Recompute full XP in the background (updates profile + refines breakdown)
-      computeUserXP(user.id).then((xp) => { if (xp) setXpData(xp); }).catch(() => { });
-
-      setStats({
-        groups: myGroups.length, pendingAssignments: allAssignments.length,
-        forumPosts: posts.length, libraryUploads: uploads.length,
-        studyPlans: plans.length, submittedCount: submitted,
-        totalUpvotes, totalViews, chapters,
-      });
-    } catch (e) { console.error("Dashboard load error:", e); }
-    finally { setLoading(false); }
-  }, [user?.id]);
-
-  useEffect(() => { load(); }, [load]);
 
   const engagementScore = useMemo(() => {
     if (!stats) return 0;

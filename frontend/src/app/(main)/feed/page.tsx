@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useDataCache } from "@/hooks/useDataCache";
 import { useUser } from "@/hooks/useUser";
 import { fetchUserFeed, type FeedItem } from "@/lib/feed";
 import { motion, AnimatePresence } from "framer-motion";
@@ -36,23 +37,15 @@ function timeAgo(iso: string) {
 export default function FeedPage() {
     const { user, isLoaded } = useUser();
     const [activeTab, setActiveTab] = useState("For You");
-    const [feed, setFeed] = useState<FeedItem[]>([]);
-    const [loading, setLoading] = useState(true);
 
-    const loadFeed = useCallback(async () => {
-        if (!user) return;
-        setLoading(true);
-        const data = await fetchUserFeed(user.id);
-        setFeed(data);
-        setLoading(false);
-    }, [user]);
-
-    useEffect(() => {
-        if (isLoaded && user) loadFeed();
-    }, [isLoaded, user, loadFeed]);
+    const cacheKey = user?.id ? `feed-${user.id}` : null;
+    const { data: feed, loading } = useDataCache<FeedItem[]>(
+        cacheKey, () => fetchUserFeed(user!.id), [user?.id]
+    );
+    const feedItems = feed ?? [];
 
     // Client-side filtering skeleton based on tabs
-    const filteredFeed = feed.filter((item) => {
+    const filteredFeed = feedItems.filter((item) => {
         if (activeTab === "Campus") return item.type === "campus";
         // For now "For You", "Friends", and "Trending" share the same default query from fetchUserFeed
         return true;
@@ -77,8 +70,8 @@ export default function FeedPage() {
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
                                 className={`flex shrink-0 items-center justify-center rounded-xl px-4 py-2 text-sm font-bold transition-all ${isActive
-                                        ? "bg-blue-600 font-bold text-white shadow-lg shadow-blue-500/20"
-                                        : "bg-[var(--ax-surface-2)] text-[var(--ax-text-muted)] hover:bg-[var(--ax-surface-3)] hover:text-white"
+                                    ? "bg-blue-600 font-bold text-white shadow-lg shadow-blue-500/20"
+                                    : "bg-[var(--ax-surface-2)] text-[var(--ax-text-muted)] hover:bg-[var(--ax-surface-3)] hover:text-white"
                                     }`}
                                 style={!isActive ? { border: "1px solid var(--ax-border)" } : undefined}
                             >

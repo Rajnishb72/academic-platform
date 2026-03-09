@@ -1,24 +1,13 @@
-import { createBrowserClient } from '@supabase/ssr'
+/**
+ * Supabase browser client — returns the SAME singleton as @/lib/supabase.
+ *
+ * This file exists so that components importing from "@/lib/supabase/client"
+ * (e.g. useUser, ProfileDropdown) get the exact same SupabaseClient instance
+ * used everywhere else, preventing the "Multiple GoTrueClient instances" warning.
+ */
 
-let _browserClient: ReturnType<typeof createBrowserClient> | undefined;
+import { supabase } from "@/lib/supabase";
 
 export function createClient() {
-    // On the server, always create a fresh instance (no caching) to prevent state leaks across requests
-    if (typeof window === 'undefined') {
-        return createBrowserClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        );
-    }
-
-    // In the browser, cache the client to prevent "Multiple GoTrueClient instances" warning
-    if (_browserClient) return _browserClient;
-
-    _browserClient = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
-
-    return _browserClient;
+    return supabase;
 }
-
