@@ -70,7 +70,7 @@ export default function UploadPage() {
       reference_id: p.planId,
       content: `Deadline tomorrow: ${p.title} — due ${new Date(p.endDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}`,
     }));
-    supabase.from("notifications").insert(rows).then(({ error }) => { if (error) console.error(error); });
+    supabase.from("notifications").insert(rows).then(({ error }: any) => { if (error) console.error(error); });
   }, [userId]);
 
   const [file, setFile] = useState<File | null>(null);

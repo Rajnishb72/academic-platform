@@ -19,7 +19,7 @@ import {
   type Institution, type Assignment,
 } from "@/lib/campus";
 import { OnboardingChecklist } from "@/components/OnboardingChecklist";
-import { computeUserXP, XP_TITLES, type XPBreakdown, type TitleLevel } from "@/lib/xp";
+import { computeUserXP, XP_TITLES, getTitle, getNextTitle, getXPToNextTitle, getTitleProgress, type XPBreakdown, type TitleLevel } from "@/lib/xp";
 import { fetchProfile } from "@/lib/profile";
 
 // ─── Title Icon Map ───────────────────────────────────────────────────────────
@@ -260,24 +260,40 @@ export default function DashboardPage() {
               dailyHours: p.daily_hours ?? 1,
               totalChapters: p.plan_data?.schedule?.length ?? 0,
             }));
-            return { plans: p, chapters: p.reduce((s, x) => s + x.totalChapters, 0) };
+            return { plans: p, chapters: p.reduce((s: number, x: StudyPlan) => s + x.totalChapters, 0) };
           }
         } catch { /* ignore */ }
         return { plans: [] as StudyPlan[], chapters: 0 };
       })();
 
-      const xpPromise = computeUserXP(user.id).catch(() => null);
       const profilePromise = fetchProfile(user.id).catch(() => null);
 
-      const [recResult, plansResult, xpResult, profileResult] = await Promise.all([
-        recommendedPromise, plansPromise, xpPromise, profilePromise,
+      const [recResult, plansResult, profileResult] = await Promise.all([
+        recommendedPromise, plansPromise, profilePromise,
       ]);
 
       setRecommended(recResult);
       const { plans, chapters } = plansResult;
       setStudyPlans(plans.slice(0, 3));
-      if (xpResult) setXpData(xpResult);
       if (profileResult?.avatar_url) setAvatarUrl(profileResult.avatar_url);
+
+      // Use cached XP from profile for instant render
+      if (profileResult?.total_xp != null) {
+        const cachedXP = profileResult.total_xp ?? 0;
+        setXpData({
+          forum: { posts: 0, comments: 0, upvotesReceived: 0, total: profileResult.forum_xp ?? 0 },
+          library: { uploads: 0, downloadsReceived: 0, ratingsReceived: 0, total: profileResult.library_xp ?? 0 },
+          planner: { plans: 0, proofs: 0, total: profileResult.planner_xp ?? 0 },
+          totalXP: cachedXP,
+          title: getTitle(cachedXP),
+          nextTitle: getNextTitle(cachedXP),
+          xpToNext: getXPToNextTitle(cachedXP),
+          progressPct: getTitleProgress(cachedXP),
+        });
+      }
+
+      // Recompute full XP in the background (updates profile + refines breakdown)
+      computeUserXP(user.id).then((xp) => { if (xp) setXpData(xp); }).catch(() => { });
 
       setStats({
         groups: myGroups.length, pendingAssignments: allAssignments.length,

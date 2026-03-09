@@ -334,8 +334,8 @@ export default function LibraryMilestonesPage() {
                             .in("interaction_type", ["view", "bookmark"]);
 
                         if (interactions) {
-                            viewCount = interactions.filter(i => i.interaction_type === "view").length;
-                            bookmarkCount = interactions.filter(i => i.interaction_type === "bookmark").length;
+                            viewCount = interactions.filter((i: any) => i.interaction_type === "view").length;
+                            bookmarkCount = interactions.filter((i: any) => i.interaction_type === "bookmark").length;
                         }
                     }
 

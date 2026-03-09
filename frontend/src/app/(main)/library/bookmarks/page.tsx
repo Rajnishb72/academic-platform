@@ -252,9 +252,9 @@ export default function BookmarksPage() {
                 if (rawNotes.length > 0) {
                     const uids = Array.from(new Set(rawNotes.map((n) => n.user_id)));
                     const { data: profs } = await supabase.from("user_profiles").select("id, display_name, avatar_url").in("id", uids);
-                    const pMap = new Map((profs || []).map((p) => [p.id, p]));
+                    const pMap = new Map((profs || []).map((p: any) => [p.id, p]));
                     const enriched = rawNotes.map((n) => {
-                        const p = pMap.get(n.user_id);
+                        const p: any = pMap.get(n.user_id);
                         return {
                             ...n,
                             uploader_name: p?.display_name || n.uploader_name,

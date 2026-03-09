@@ -8,6 +8,10 @@ export interface UserProfile {
   bio?: string;
   institution?: string;
   is_verified?: boolean;
+  total_xp?: number;
+  forum_xp?: number;
+  library_xp?: number;
+  planner_xp?: number;
 }
 
 // ─── Ensure row exists (called on every login) ──────────────────────────────
