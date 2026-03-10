@@ -16,7 +16,7 @@ interface Props {
 }
 
 export function ProfileDropdown({ variant = "header", onNavigate }: Props) {
-  const { user, supabaseUser } = useUser();
+  const { user, supabaseUser, isLoaded } = useUser();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -64,6 +64,24 @@ export function ProfileDropdown({ variant = "header", onNavigate }: Props) {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  // ── Show skeleton while auth is loading (prevents "?" flash on refresh) ──
+  if (!isLoaded) {
+    if (variant === "sidebar") {
+      return (
+        <div className="flex items-center gap-3 rounded-xl px-2 py-2">
+          <div className="h-[34px] w-[34px] shrink-0 rounded-full bg-slate-700 animate-pulse" />
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <div className="h-3 w-24 rounded bg-slate-700 animate-pulse" />
+            <div className="h-2.5 w-16 rounded bg-slate-800 animate-pulse" />
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="h-8 w-8 rounded-full bg-slate-700 animate-pulse" />
+    );
+  }
 
   const initials = user
     ? ((user.firstName?.[0] ?? "") + (user.lastName?.[0] ?? "")).toUpperCase() || (user.username?.[0]?.toUpperCase() ?? "?")
